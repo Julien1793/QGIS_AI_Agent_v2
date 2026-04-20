@@ -151,6 +151,10 @@ class OptionsDialog(QDialog):
         self.chk_agent_show_steps.setChecked(self.settings.get_agent_show_steps())
         self.layout.addWidget(self.chk_agent_show_steps)
 
+        self.chk_canvas_capture = QCheckBox()
+        self.chk_canvas_capture.setChecked(self.settings.get_canvas_capture_enabled())
+        self.layout.addWidget(self.chk_canvas_capture)
+
         # --- Action buttons ---
         self.btn_layout = QHBoxLayout()
         self.btn_test = QPushButton()
@@ -225,6 +229,8 @@ class OptionsDialog(QDialog):
         self.agent_iter_spin.setToolTip(self.t.get("agent_max_iterations_hint", ""))
         self.chk_agent_show_steps.setText(self.t["agent_show_steps"])
         self.chk_agent_show_steps.setToolTip(self.t.get("agent_show_steps_hint", ""))
+        self.chk_canvas_capture.setText(self.t.get("canvas_capture_enabled", "Capture du canvas (vérification visuelle)"))
+        self.chk_canvas_capture.setToolTip(self.t.get("canvas_capture_enabled_hint", ""))
 
 
 
@@ -313,6 +319,7 @@ class OptionsDialog(QDialog):
         self.settings.set_agent_mode_enabled(self.chk_agent_mode.isChecked())
         self.settings.set_agent_max_iterations(int(self.agent_iter_spin.value()))
         self.settings.set_agent_show_steps(self.chk_agent_show_steps.isChecked())
+        self.settings.set_canvas_capture_enabled(self.chk_canvas_capture.isChecked())
 
 
         self.accept()

@@ -64,6 +64,8 @@ class AgentLoop:
 
         # 3 — Retrieve the tool schemas for the detected intents.
         tools = get_schemas_for_intent(intents)
+        if not self.settings.get_canvas_capture_enabled():
+            tools = [s for s in tools if s["function"]["name"] != "capture_map_canvas"]
         tool_names = [tt["function"]["name"] for tt in tools]
 
         # 4 — Emit the detected intents and selected tools to the UI.
@@ -133,9 +135,13 @@ class AgentLoop:
                 self._emit(on_step, "tool_call", tool_call_text,
                            data={"name": tool_name, "args": tool_args})
 
-                # Delegate to the external tool_executor (main thread) if provided, otherwise run locally.
-                _execute = tool_executor or self._execute_tool
-                result = _execute(tool_name, tool_args)
+                # Meta-tool: expand the tool set mid-loop without calling a QGIS handler.
+                if tool_name == "request_additional_tools":
+                    result = self._expand_tools(tool_args, tools, t)
+                else:
+                    # Delegate to the external tool_executor (main thread) if provided, otherwise run locally.
+                    _execute = tool_executor or self._execute_tool
+                    result = _execute(tool_name, tool_args)
 
                 # Emit the tool result with a human-readable translated summary.
                 if result.get("success"):
@@ -315,6 +321,30 @@ class AgentLoop:
             return None, 0
 
     # ══════════════════════════════════════════════════════════
+    # Expansion dynamique des tools mid-loop
+    # ══════════════════════════════════════════════════════════
+
+    def _expand_tools(self, args: dict, tools: list, t: dict) -> dict:
+        """Inject additional tool schemas into the live tools list based on requested intents."""
+        valid_intents = {"read", "process", "select", "style", "edit", "export", "analyse", "view"}
+        requested = [i for i in args.get("intents", []) if i in valid_intents]
+        if not requested:
+            return {"success": False, "tool": "request_additional_tools",
+                    "error": "Aucun intent valide fourni."}
+
+        existing_names = {s["function"]["name"] for s in tools}
+        added = []
+        for schema in get_schemas_for_intent(requested):
+            name = schema["function"]["name"]
+            if name not in existing_names:
+                tools.append(schema)
+                existing_names.add(name)
+                added.append(name)
+
+        return {"success": True, "tool": "request_additional_tools",
+                "added_tools": added, "requested_intents": requested}
+
+    # ══════════════════════════════════════════════════════════
     # Dispatch vers les handlers
     # ══════════════════════════════════════════════════════════
 
@@ -399,6 +429,12 @@ class AgentLoop:
             return t["agent_result_style_applied"].format(
                 layer=result.get("layer", "?"),
             )
+
+        # Dynamic tool expansion.
+        if tool == "request_additional_tools":
+            added = result.get("added_tools", [])
+            return t["agent_result_tools_expanded"].format(
+                tools=", ".join(added) if added else "aucun nouveau")
 
         # Canvas screenshot.
         if tool == "capture_map_canvas":

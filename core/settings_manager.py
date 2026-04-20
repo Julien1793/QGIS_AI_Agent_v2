@@ -159,6 +159,14 @@ class SettingsManager:
     def set_agent_mode_enabled(self, enabled: bool):
         self.set("agent_mode_enabled", bool(enabled))
 
+    def get_canvas_capture_enabled(self) -> bool:
+        val = self.get("canvas_capture_enabled", True)
+        s = str(val).strip().lower()
+        return s in ("1", "true", "yes", "on")
+
+    def set_canvas_capture_enabled(self, enabled: bool):
+        self.set("canvas_capture_enabled", bool(enabled))
+
     def get_agent_max_iterations(self) -> int:
         return self.get_int("agent_max_iterations", 8)
 

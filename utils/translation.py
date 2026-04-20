@@ -82,6 +82,8 @@ def get_translations(lang):
             "agent_max_iterations_hint": "Nombre maximum d'étapes agent par requête.",
             "agent_show_steps": "Afficher les étapes en direct",
             "agent_show_steps_hint": "Affiche chaque appel d'outil et son résultat dans le chat.",
+            "canvas_capture_enabled": "Activer la capture du canvas (vérification visuelle)",
+            "canvas_capture_enabled_hint": "Permet à l'agent de capturer le canvas QGIS pour vérifier visuellement les styles et étiquettes.",
 
             # Étapes affichées dans le chat
             "agent_step_thinking": "Analyse de la demande...",
@@ -114,6 +116,7 @@ def get_translations(lang):
             "agent_result_features_info": "{returned} features retournées sur {total}",
             "agent_result_zoom": "Zoom effectué sur '{target}'",
             "agent_result_canvas_captured": "Capture d'écran du canvas ({width}×{height} px)",
+            "agent_result_tools_expanded": "Outils ajoutés : {tools}",
 
             # Labels d'étape
             "agent_label_intent": "Analyse",
@@ -279,6 +282,8 @@ def get_translations(lang):
             "agent_max_iterations_hint": "Maximum number of agent steps per request.",
             "agent_show_steps": "Show steps in real time",
             "agent_show_steps_hint": "Display each tool call and its result in the chat.",
+            "canvas_capture_enabled": "Enable canvas capture (visual verification)",
+            "canvas_capture_enabled_hint": "Allows the agent to capture the QGIS canvas to visually verify styles and labels.",
 
             # Steps in chat
             "agent_step_thinking": "Analyzing request...",
@@ -311,6 +316,7 @@ def get_translations(lang):
             "agent_result_features_info": "{returned} features returned out of {total}",
             "agent_result_zoom": "Zoomed to '{target}'",
             "agent_result_canvas_captured": "Map canvas captured ({width}×{height} px)",
+            "agent_result_tools_expanded": "Tools added: {tools}",
 
             # Step labels
             "agent_label_intent": "Analysis",

@@ -1079,8 +1079,42 @@ REGISTRY = {
     # ULTIMATE FALLBACK
     # ══════════════════════════════════════════════════════════
 
+    "request_additional_tools": {
+        "intents": ["__always__"],
+        "handler": None,
+        "schema": {
+            "type": "function",
+            "function": {
+                "name": "request_additional_tools",
+                "description": (
+                    "Demande l'accès à des outils supplémentaires si tu réalises en cours d'exécution "
+                    "que les outils disponibles ne couvrent pas tous les besoins. "
+                    "Spécifie les intents manquants parmi : read, process, select, style, edit, export, analyse, view. "
+                    "Les nouveaux outils seront immédiatement disponibles pour les prochains appels."
+                ),
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "intents": {
+                            "type": "array",
+                            "items": {"type": "string"},
+                            "description": "Liste des intents dont tu as besoin, ex: [\"style\", \"edit\"].",
+                        },
+                        "reason": {
+                            "type": "string",
+                            "description": "Pourquoi ces outils supplémentaires sont nécessaires.",
+                        },
+                    },
+                    "required": ["intents"],
+                },
+            },
+        },
+    },
+
+    # ══════════════════════════════════════════════════════════
+
     "capture_map_canvas": {
-        "intents": ["style", "view"],
+        "intents": ["__always__"],
         "handler": "capture_map_canvas",
         "schema": {
             "type": "function",
@@ -1158,9 +1192,11 @@ def get_schemas_for_intent(intents: list) -> list:
             if name not in tool_names:
                 tool_names.append(name)
 
-    # Always ensure the fallback tool is available
+    # Always ensure the fallback and visual verification tools are available
     if "run_pyqgis_code" not in tool_names:
         tool_names.append("run_pyqgis_code")
+    if "capture_map_canvas" not in tool_names:
+        tool_names.append("capture_map_canvas")
 
     return [REGISTRY[name]["schema"] for name in tool_names]
 
