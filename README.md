@@ -234,20 +234,6 @@ Tools are automatically available in agent mode once registered.
 
 ---
 
-## Contributing
-
-Contributions are welcome. A few notes before opening a pull request:
-
-- There is no test suite or CI pipeline at the moment.
-- All code comments must be written in **English**.
-- Keep new tools in sync between `tools_registry.py` (schema) and `tools_handlers.py` (implementation).
-- New user-facing strings must be added to `utils/translation.py` in **both** `fr` and `en`.
-- Prefer editing existing modules over creating new ones for small additions.
-
-Please open an issue first for significant feature additions or architectural changes.
-
----
-
 ## License
 
 This project is licensed under the **GNU General Public License v2.0** — see [LICENSE](LICENSE) for details.
