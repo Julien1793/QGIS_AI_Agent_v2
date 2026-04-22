@@ -27,18 +27,6 @@ def get_translations(lang):
             "review_title": "Vérifier et exécuter",
             "code_preview": "Aperçu du code (modifiable avant exécution)",
             "run_now": "Lancer",
-            "system_prompt_chat": (
-                "Tu es un expert QGIS et tu aides un utilisateur qui est dans QGIS. "
-                "Version actuelle : {qgis_version}. Réponds clairement à l'utilisateur. "
-                "Réponds en français."
-            ),
-            "system_prompt_code": (
-                "Tu es un expert QGIS et tu aides un utilisateur qui est dans QGIS. "
-                "Version actuelle : {qgis_version}. "
-                "Génère UNIQUEMENT du code PyQGIS exécutable (avec les imports), sans explications. "
-                "Ajoute des commentaires Python en français. "
-                "Si aucun chemin de sortie n'est précisé, écris en mémoire."
-            ),
             "project_snapshot_intro": "Voici l'état du projet QGIS de l'utilisateur :",
             "reset": "Réinitialiser",
             "reset_confirm": "Réinitialiser tous les réglages du plugin ?\n(Cela n'efface pas vos projets QGIS.)",
@@ -95,6 +83,7 @@ def get_translations(lang):
             "agent_step_iteration": "Étape limite {current}/{max}",
             "agent_step_final": "Synthèse de la réponse...",
             "agent_step_max_iterations": "Nombre maximum d'itérations atteint ({max}). Opération incomplète.",
+            "agent_no_new_tools":"aucun nouveau",
 
             # Résumés de tool_result
             "agent_result_layer_created": "Couche '{name}' créée ({count} features)",
@@ -124,45 +113,6 @@ def get_translations(lang):
             "agent_label_tool_result": "Résultat",
             "agent_label_final": "Réponse",
 
-            # Prompts système de l'agent
-            "agent_system_prompt": (
-                "Tu es un agent QGIS expert intégré dans le plugin QGIS AI Agent. "
-                "Tu as accès à des tools pour manipuler le projet SIG ouvert dans QGIS.\n\n"
-                "RÈGLES IMPORTANTES :\n"
-                "- Exécute les opérations demandées étape par étape.\n"
-                "- Après chaque tool_call, analyse le résultat avant de continuer.\n"
-                "- Si une opération échoue (success: false), explique pourquoi et propose une alternative.\n"
-                "- Si tu dois connaître les champs d'une couche, utilise get_layer_fields en premier.\n"
-                "- Utilise run_pyqgis_code UNIQUEMENT si aucun autre tool ne couvre le besoin.\n"
-                "- Après avoir appliqué un style, une symbologie, des étiquettes ou tout changement visuel "
-                "sur une couche, appelle TOUJOURS capture_map_canvas pour vérifier visuellement le résultat "
-                "avant de répondre à l'utilisateur.\n"
-                "- Si l'utilisateur pose une question sur ce qui est affiché sur la carte, sa localisation "
-                "actuelle, ce qu'il voit, ou l'état visuel du projet, appelle capture_map_canvas en premier "
-                "AVANT de répondre — ne demande jamais à l'utilisateur d'envoyer une capture lui-même.\n"
-                "- Réponds en français.\n"
-                "- Quand toutes les opérations sont terminées, fais un résumé concis de ce qui a été fait."
-            ),
-            "agent_intent_system": (
-                "Tu es un classifieur d'intention pour un assistant QGIS. "
-                "Réponds UNIQUEMENT avec du JSON valide, sans texte avant ou après. "
-                "Ne jamais expliquer, ne jamais ajouter de commentaires."
-            ),
-            "agent_intent_user": (
-                "Classe cette demande QGIS en JSON.\n\n"
-                "Intents disponibles (tu peux en choisir plusieurs) :\n"
-                "- \"read\"    : lire des données, afficher infos, statistiques, valeurs d'un champ\n"
-                "- \"process\" : géotraitement spatial (buffer, clip, dissolve, intersection, reprojection, jointure spatiale)\n"
-                "- \"select\"  : sélectionner ou filtrer des features (par expression ou localisation)\n"
-                "- \"style\"   : modifier l'apparence d'une couche (couleur, catégorisation, graduation, visibilité, opacité)\n"
-                "- \"edit\"    : modifier des données (ajouter/calculer un champ, charger une couche)\n"
-                "- \"export\"  : exporter ou sauvegarder une couche\n"
-                "- \"analyse\" : calculs spatiaux, statistiques avancées, vérification qualité\n"
-                "- \"view\"    : zoomer, naviguer dans la carte\n\n"
-                "Format de réponse :\n"
-                "{{\"intents\": [\"intent1\", \"intent2\"], \"layer_names\": [\"nom couche mentionnée\"]}}\n\n"
-                "Demande : {prompt}"
-            ),
 
             # Options
             "language": "Langue de réponse :",
@@ -197,9 +147,85 @@ def get_translations(lang):
             "process_browser_tab": "Traitements",
             "process_no_steps": "Aucune étape enregistrée pour ce traitement.",
             "process_saved_ok": "Traitement enregistré avec succès.",
+            "process_saved_updated": "Traitement mis à jour :\n{path}",
             "process_run_done": "Traitement terminé.",
             "process_run_error": "Erreur pendant l'exécution du traitement.",
             "processes_folder": "Dossier des traitements :",
+            "process_save_dlg_title_new": "Enregistrer comme traitement personnalisé",
+            "process_save_dlg_title_edit": "Modifier le traitement personnalisé",
+            "process_btn_save": "Enregistrer",
+            "process_btn_save_as": "Enregistrer sous…",
+            "process_btn_cancel": "Annuler",
+            "process_context_run": "Ouvrir / Lancer",
+            "process_context_edit": "Éditer",
+            "process_context_delete": "Supprimer",
+            "process_context_new_folder": "Nouveau sous-dossier…",
+            "process_context_delete_folder": "Supprimer le dossier",
+            "process_new_folder_title": "Nouveau dossier",
+            "process_new_folder_prompt": "Nom du nouveau dossier :",
+            "process_delete_folder_confirm": "Supprimer le dossier « {name} » et tout son contenu ?",
+            "process_folder_dest":"Choisir le dossier de base des traitements",
+            # Onglets
+            "process_tab_info": "Informations",
+            "process_tab_variables": "Variables",
+            "process_tab_steps": "Étapes / Code",
+            "process_tab_preview": "Aperçu JSON",
+            # Onglet Informations
+            "process_name_label": "Nom du traitement :",
+            "process_name_placeholder": "Ex : Reprojection + Export",
+            "process_desc_label": "Description :",
+            "process_desc_placeholder": "Description courte (optionnelle)…",
+            "process_folder_label": "Dossier projet :",
+            "process_folder_placeholder": "Ex : Vecteur/Géotraitement",
+            "process_folder_browse_btn": "Parcourir…",
+            "process_folder_info": "Les traitements sont enregistrés dans :",
+            "process_browse_dlg_title": "Choisir un dossier de base",
+            # Onglet Variables
+            "process_vars_note": "Variables détectées automatiquement.\nVous pouvez modifier les labels et les types.",
+            "process_vars_col_id": "ID",
+            "process_vars_col_label": "Label utilisateur",
+            "process_vars_col_type": "Type",
+            "process_vars_col_default": "Valeur par défaut",
+            "process_vars_add_btn": "+ Ajouter une variable",
+            "process_vars_del_btn": "Supprimer la sélection",
+            "process_new_variable_label": "Nouvelle variable",
+            # Types de variables
+            "process_vartype_layer": "Couche",
+            "process_vartype_field": "Champ",
+            "process_vartype_file": "Fichier",
+            "process_vartype_crs": "SCR",
+            "process_vartype_value": "Valeur",
+            "process_vartype_code": "Code PyQGIS",
+            # Onglet Étapes
+            "process_steps_note": "Étapes enregistrées. Utilisez × pour supprimer une étape. Pour les blocs de code PyQGIS, vous pouvez éditer le code directement (il remplacera la valeur par défaut de la variable).",
+            "process_step_header": "Étape {num}",
+            "process_step_delete_tooltip": "Supprimer cette étape",
+            "process_step_code_label": "Code PyQGIS (éditable) :",
+            # Messages de sauvegarde / erreur
+            "process_saved_title": "Enregistré",
+            "process_saved_new": "Traitement enregistré :\n{path}",
+            "process_error_title": "Erreur",
+            "process_error_save": "Impossible d'enregistrer :\n{error}",
+            "process_missing_name_title": "Nom manquant",
+            "process_missing_name_msg": "Veuillez saisir un nom pour le traitement.",
+            "process_fallback_name": "Sans nom",
+            "process_browser_header": "Traitements personnalisés",
+            "process_refresh_tooltip": "Actualiser la liste",
+            "process_change_folder_tooltip": "Changer le dossier de base",
+            "process_base_folder_label": "Dossier : {path}",
+            "process_none_saved": "Aucun traitement enregistré",
+            "process_load_error": "Impossible de charger le traitement :\n{error}",
+            "process_delete_confirm_msg": "Supprimer le traitement « {name} » ?\n{path}",
+            "process_delete_error": "Impossible de supprimer :\n{error}",
+
+            # Windows CA bundle
+            "use_windows_ca_bundle": "Utiliser les certificats Windows (CA bundle)",
+            "use_windows_ca_bundle_hint": "Exporte les certificats racine Windows et les utilise pour les requêtes HTTPS. Utile pour les LLM hébergés sur un réseau interne avec des certificats d'entreprise.",
+            "ca_bundle_cert_encoding": "Encodage des certificats :",
+            "ca_bundle_cert_encoding_hint": "Format des certificats à extraire du store Windows.",
+            "ca_bundle_refreshed": "CA bundle mis à jour ({count} certificats exportés).",
+            "ca_bundle_error": "Erreur lors de la mise à jour du CA bundle : {}",
+            "ca_bundle_encoding_empty": "Le champ d'encodage des certificats est vide. Veuillez le renseigner avant d'activer l'option.",
         },
         "en": {
             "dock_title": "AI Assistant",
@@ -231,7 +257,7 @@ def get_translations(lang):
             "system_prompt_chat": (
                 "You are a QGIS expert helping a user inside QGIS. "
                 "Current version: {qgis_version}. Be clear and concise. "
-                "Reply in English."
+                "Always reply in the same language the user is writing in."
             ),
             "system_prompt_code": (
                 "You are a QGIS expert helping a user inside QGIS. "
@@ -295,6 +321,7 @@ def get_translations(lang):
             "agent_step_iteration": "Limit step {current}/{max}",
             "agent_step_final": "Finalizing response...",
             "agent_step_max_iterations": "Maximum iterations reached ({max}). Operation incomplete.",
+            "agent_no_new_tools":"no new tools",
 
             # Tool result summaries
             "agent_result_layer_created": "Layer '{name}' created ({count} features)",
@@ -339,7 +366,7 @@ def get_translations(lang):
                 "- If the user asks about what is displayed on the map, their current location, what they see, "
                 "or the visual state of the project, call capture_map_canvas FIRST before responding — "
                 "never ask the user to send a screenshot themselves.\n"
-                "- Reply in English.\n"
+                "- Always reply in the same language the user is writing in.\n"
                 "- When all operations are done, give a concise summary of what was done."
             ),
             "agent_intent_system": (
@@ -396,9 +423,85 @@ def get_translations(lang):
             "process_browser_tab": "Processes",
             "process_no_steps": "No steps were recorded for this run.",
             "process_saved_ok": "Process saved successfully.",
+            "process_saved_updated": "Process updated:\n{path}",
             "process_run_done": "Process completed.",
             "process_run_error": "Error during process execution.",
             "processes_folder": "Processes folder:",
+            "process_save_dlg_title_new": "Save as custom process",
+            "process_save_dlg_title_edit": "Edit custom process",
+            "process_btn_save": "Save",
+            "process_btn_save_as": "Save as…",
+            "process_btn_cancel": "Cancel",
+            "process_context_run": "Open / Run",
+            "process_context_edit": "Edit",
+            "process_context_delete": "Delete",
+            "process_context_new_folder": "New subfolder…",
+            "process_context_delete_folder": "Delete folder",
+            "process_new_folder_title": "New folder",
+            "process_new_folder_prompt": "New folder name:",
+            "process_delete_folder_confirm": "Delete folder \"{name}\" and all its contents?",
+            "process_folder_dest":"Choose the base folder for the process",
+            # Tabs
+            "process_tab_info": "Information",
+            "process_tab_variables": "Variables",
+            "process_tab_steps": "Steps / Code",
+            "process_tab_preview": "JSON Preview",
+            # Information tab
+            "process_name_label": "Process name:",
+            "process_name_placeholder": "E.g.: Reprojection + Export",
+            "process_desc_label": "Description:",
+            "process_desc_placeholder": "Short description (optional)…",
+            "process_folder_label": "Project folder:",
+            "process_folder_placeholder": "E.g.: Vector/Geoprocessing",
+            "process_folder_browse_btn": "Browse…",
+            "process_folder_info": "Processes are saved in:",
+            "process_browse_dlg_title": "Choose base folder",
+            # Variables tab
+            "process_vars_note": "Variables detected automatically.\nYou can edit labels and types.",
+            "process_vars_col_id": "ID",
+            "process_vars_col_label": "User label",
+            "process_vars_col_type": "Type",
+            "process_vars_col_default": "Default value",
+            "process_vars_add_btn": "+ Add variable",
+            "process_vars_del_btn": "Delete selection",
+            "process_new_variable_label": "New variable",
+            # Variable types
+            "process_vartype_layer": "Layer",
+            "process_vartype_field": "Field",
+            "process_vartype_file": "File",
+            "process_vartype_crs": "CRS",
+            "process_vartype_value": "Value",
+            "process_vartype_code": "PyQGIS Code",
+            # Steps tab
+            "process_steps_note": "Recorded steps. Use × to delete a step. For PyQGIS code blocks, you can edit the code directly (it will replace the variable's default value).",
+            "process_step_header": "Step {num}",
+            "process_step_delete_tooltip": "Delete this step",
+            "process_step_code_label": "PyQGIS code (editable):",
+            # Save / error messages
+            "process_saved_title": "Saved",
+            "process_saved_new": "Process saved:\n{path}",
+            "process_error_title": "Error",
+            "process_error_save": "Could not save:\n{error}",
+            "process_missing_name_title": "Missing name",
+            "process_missing_name_msg": "Please enter a name for the process.",
+            "process_fallback_name": "Untitled",
+            "process_browser_header": "Custom processes",
+            "process_refresh_tooltip": "Refresh list",
+            "process_change_folder_tooltip": "Change base folder",
+            "process_base_folder_label": "Folder: {path}",
+            "process_none_saved": "No saved processes",
+            "process_load_error": "Could not load the process:\n{error}",
+            "process_delete_confirm_msg": "Delete the process \"{name}\"?\n{path}",
+            "process_delete_error": "Could not delete:\n{error}",
+
+            # Windows CA bundle
+            "use_windows_ca_bundle": "Use Windows certificates (CA bundle)",
+            "use_windows_ca_bundle_hint": "Exports Windows root certificates and uses them for HTTPS requests. Useful for on-premise LLMs with corporate certificates.",
+            "ca_bundle_cert_encoding": "Certificate encoding:",
+            "ca_bundle_cert_encoding_hint": "Format of certificates to extract from the Windows store.",
+            "ca_bundle_refreshed": "CA bundle updated ({count} certificates exported).",
+            "ca_bundle_error": "Error updating CA bundle: {}",
+            "ca_bundle_encoding_empty": "The certificate encoding field is empty. Please fill it in before enabling this option.",
         },
     }
     base = translations["en"]

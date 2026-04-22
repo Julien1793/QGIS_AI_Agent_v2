@@ -284,7 +284,8 @@ class StreamWorker(QObject):
             payload_stream = dict(payload)
             payload_stream["stream"] = True
 
-            resp = requests.post(api_url, json=payload_stream, headers=headers, stream=True, timeout=300)
+            resp = requests.post(api_url, json=payload_stream, headers=headers, stream=True, timeout=300,
+                                 verify=self.agent.settings.get_ssl_verify())
 
             if resp.status_code >= 400:
                 self.error.emit(f"HTTP {resp.status_code}: {resp.text}")
@@ -371,9 +372,35 @@ class MainDock(QDockWidget):
 
         self.messages_loaded = False
         self._last_exec_had_error = False
+        self._refresh_ca_bundle_on_open()
         self.init_ui()
         self._pending_ranges = {}  # pid -> (start_pos, end_pos)
         self._process_recorder = ProcessRecorder()
+
+    def _refresh_ca_bundle_on_open(self):
+        if not self.settings_manager.get_use_windows_ca_bundle():
+            return
+        cert_enc = self.settings_manager.get_ca_bundle_cert_encoding()
+        if not cert_enc:
+            QMessageBox.warning(
+                self, self.t.get("error", "Erreur"),
+                self.t.get("ca_bundle_encoding_empty", "Le champ d'encodage des certificats est vide.")
+            )
+            return
+        try:
+            from ..core.cert_manager import refresh_ca_bundle
+            plugin_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            path, count = refresh_ca_bundle(plugin_dir, cert_encoding_filter=cert_enc)
+            self.settings_manager.set_ca_bundle_path(path)
+            QMessageBox.information(
+                self, self.t.get("success", "Succès"),
+                self.t.get("ca_bundle_refreshed", "CA bundle mis à jour ({count} certificats exportés).").format(count=count)
+            )
+        except Exception as e:
+            QMessageBox.critical(
+                self, self.t.get("error", "Erreur"),
+                self.t.get("ca_bundle_error", "Erreur lors de la mise à jour du CA bundle : {}").format(str(e))
+            )
 
     def init_ui(self):
         main_widget = QWidget()
@@ -396,6 +423,7 @@ class MainDock(QDockWidget):
         # Processes browser tab
         self.process_browser = ProcessBrowserWidget(
             base_folder_getter=self.settings_manager.get_processes_folder,
+            language=self.settings_manager.get_language(),
         )
         self.process_browser.run_requested.connect(self._on_run_process_requested)
         self.process_browser.parent_set_base_folder = self._set_processes_base_folder
@@ -505,6 +533,7 @@ class MainDock(QDockWidget):
         self._execute_default_stylesheet = self.btn_execute.styleSheet()
         self.btn_clear = QPushButton(self.t["clear"])
         self.btn_options = QPushButton(self.t["options"])
+        self.btn_index = QPushButton(self.t["index_project"])
 
         button_layout = QHBoxLayout()
         button_layout.addWidget(self.btn_send)
@@ -512,10 +541,11 @@ class MainDock(QDockWidget):
         button_layout.addWidget(self.btn_execute)
         button_layout.addWidget(self.btn_clear)
         button_layout.addWidget(self.btn_options)
+        button_layout.addWidget(self.btn_index)
         layout.addLayout(button_layout)
 
-        self.btn_index = QPushButton(self.t["index_project"])
-        button_layout.addWidget(self.btn_index)
+        
+        
         self.btn_index.clicked.connect(self.handle_index_project)
 
         self.btn_save_process = QPushButton(
@@ -764,7 +794,7 @@ class MainDock(QDockWidget):
         try:
             snapshot = build_project_snapshot()
             snapshot_json = snapshot_to_json(snapshot, max_bytes=kb * 1024)
-        except Exception as e:
+        except Exception:
             snapshot_json = "{}"
 
         # 3) Insert a placeholder assistant bubble with an empty agent-steps block
@@ -995,7 +1025,10 @@ class MainDock(QDockWidget):
                 )
                 return
             base_folder = self.settings_manager.get_processes_folder()
-            dlg = ProcessSaveDialog(self._process_recorder, base_folder, self)
+            dlg = ProcessSaveDialog(
+                self._process_recorder, base_folder,
+                language=self.settings_manager.get_language(), parent=self,
+            )
             if dlg.exec_():
                 if hasattr(self, "process_browser"):
                     self.process_browser.refresh()
@@ -1718,7 +1751,9 @@ class MainDock(QDockWidget):
         if hasattr(self, "btn_generate"):
             self.btn_generate.setEnabled(enabled)
         if hasattr(self, "btn_execute"):
-            self.btn_execute.setEnabled(enabled)
+            self.btn_execute.setEnabled(enabled) 
+        if hasattr(self, "btn_index"):
+            self.btn_index.setEnabled(enabled)
         # Onglet Debug (index 1) : désactivé en mode agent
         if hasattr(self, "tabs"):
             current = self.tabs.currentIndex()

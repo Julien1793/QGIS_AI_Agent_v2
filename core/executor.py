@@ -1,7 +1,7 @@
 # core/executor.py
 
 from qgis.PyQt.QtWidgets import QMessageBox
-from qgis.core import QgsProject, QgsVectorLayer, QgsApplication, Qgis
+from qgis.core import QgsProject, QgsVectorLayer, QgsApplication, QgsMessageLog, Qgis
 import processing
 import traceback
 import warnings
@@ -85,7 +85,10 @@ class CodeExecutor:
 
                 for w in pywarns:
                     try:
-                        self._warnings.append(f"[PythonWarning] {str(w.message)}")
+                        loc = f"{w.filename}:{w.lineno}"
+                        self._warnings.append(
+                            f"[PythonWarning] {str(w.message)}  ({loc})"
+                        )
                     except Exception:
                         pass
 
@@ -95,41 +98,58 @@ class CodeExecutor:
             err_msg = traceback.format_exc()
 
         finally:
+            # Flush pending Qt events so any QGIS log messages emitted
+            # asynchronously (e.g. from processing algorithms) are delivered
+            # to _on_qgis_log before we clear the capture flag.
+            try:
+                from qgis.PyQt.QtWidgets import QApplication
+                QApplication.processEvents()
+            except Exception:
+                pass
             self._executing = False
 
-            # --- Blocking error: code raised an exception ---
-            if not ok:
-                title = self.t.get("exec_error_title", "Execution error")
-                self.iface.messageBar().pushCritical(title, (err_msg or ""))
+        # --- Blocking error: code raised an exception ---
+        if not ok:
+            title = self.t.get("exec_error_title", "Execution error")
+            self.iface.messageBar().pushCritical(title, (err_msg or ""))
 
-                # Build the localised error string ready for the Debug tab.
-                #err_label = "Erreur :" if self._lang == "fr" else "Error :"
-                err_label = self.t.get("error_to_fix","Error :")
-                composed = f"{err_label} {err_msg or ''}".strip()
-                if self.on_error_callback:
-                    self.on_error_callback(code, composed)
-                return False, err_msg
+            # Build the localised error string ready for the Debug tab.
+            #err_label = "Erreur :" if self._lang == "fr" else "Error :"
+            err_label = self.t.get("error_to_fix","Error :")
+            composed = f"{err_label} {err_msg or ''}".strip()
+            if self.on_error_callback:
+                self.on_error_callback(code, composed)
+            return False, err_msg
 
-            # --- Success with QGIS or Python warnings ---
-            if self._warnings:
-                # Show a non-blocking notification in the QGIS message bar.
-                self.iface.messageBar().pushWarning(
-                    self.t.get("dock_title", "AI Assistant"),
-                    self.t.get("exec_warn_to_debug", "Execution finished with warnings — opening Debug tab.")
-                )
-                warn_label = f"{self.t.get('warnings', 'Warnings')} :"
-                warn_prefix = self.t.get("warnings_prefix_debug", "QGIS warnings during execution:")
-                warn_text = "\n".join(self._warnings)
-
-                # Pre-compose the Debug tab text so the UI does not inject a second error prefix.
-                composed = f"{warn_label} {warn_prefix}\n{warn_text}".strip()
-                if self.on_error_callback:
-                    self.on_error_callback(code, composed)
-                return True, warn_text
-
-            # --- Clean success: no errors, no warnings ---
-            self.iface.messageBar().pushSuccess(
+        # --- Success with QGIS or Python warnings ---
+        if self._warnings:
+            # Show a non-blocking notification in the QGIS message bar.
+            self.iface.messageBar().pushWarning(
                 self.t.get("dock_title", "AI Assistant"),
-                self.t.get("exec_success", "Execution successful.")
+                self.t.get("exec_warn_to_debug", "Execution finished with warnings — opening Debug tab.")
             )
-            return True, None
+            # Forward unique warnings to the QGIS message log so they are
+            # visible in the Log Messages panel (deduplicate to avoid repeats
+            # when the same warning fires multiple times in the executed code).
+            tag = self.t.get("dock_title", "AI Assistant")
+            seen = set()
+            for w in self._warnings:
+                if w not in seen:
+                    seen.add(w)
+                    QgsMessageLog.logMessage(w, tag, Qgis.Warning)
+            warn_label = f"{self.t.get('warnings', 'Warnings')} :"
+            warn_prefix = self.t.get("warnings_prefix_debug", "QGIS warnings during execution:")
+            warn_text = "\n".join(self._warnings)
+
+            # Pre-compose the Debug tab text so the UI does not inject a second error prefix.
+            composed = f"{warn_label} {warn_prefix}\n{warn_text}".strip()
+            if self.on_error_callback:
+                self.on_error_callback(code, composed)
+            return True, warn_text
+
+        # --- Clean success: no errors, no warnings ---
+        self.iface.messageBar().pushSuccess(
+            self.t.get("dock_title", "AI Assistant"),
+            self.t.get("exec_success", "Execution successful.")
+        )
+        return True, None

@@ -203,8 +203,10 @@ class AgentLoop:
             if key:
                 headers["Authorization"] = f"Bearer {key}"
 
-        # o-series models don't support temperature != 1; all new OpenAI models use max_completion_tokens.
-        is_o_series = bool(re.match(r"^o\d", model))
+        # o-series models require max_completion_tokens and don't support temperature != 1.
+        # All other backends (Mistral, Llama, older OpenAI-compat APIs) use max_tokens.
+        is_o_series = bool(re.match(r"^(o\d|gpt-5)", model))
+        token_key = "max_completion_tokens" if is_o_series else "max_tokens"
         payload = {
             "model": model,
             "messages": [
@@ -212,13 +214,14 @@ class AgentLoop:
                 {"role": "user",
                  "content": t["agent_intent_user"].format(prompt=prompt)},
             ],
-            "max_completion_tokens": 150,
+            token_key: 150,
         }
         if not is_o_series:
             payload["temperature"] = 0
 
         try:
-            resp = requests.post(api_url, json=payload, headers=headers, timeout=30)
+            resp = requests.post(api_url, json=payload, headers=headers, timeout=30,
+                                 verify=self.settings.get_ssl_verify())
             if not resp.ok:
                 try:
                     from qgis.core import QgsMessageLog, Qgis
@@ -290,7 +293,8 @@ class AgentLoop:
         }
 
         try:
-            resp = requests.post(api_url, json=payload, headers=headers, timeout=300)
+            resp = requests.post(api_url, json=payload, headers=headers, timeout=300,
+                                 verify=self.settings.get_ssl_verify())
             resp.raise_for_status()
             data = resp.json()
 

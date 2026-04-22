@@ -24,30 +24,42 @@ class ProcessRecorder:
     def __init__(self):
         self.steps = []      # list of {tool, params, code (optional)}
         self._recording = False
+        self._pending = None  # tool call awaiting result confirmation
 
     def start(self):
         self.steps = []
         self._recording = True
+        self._pending = None
 
     def stop(self):
         self._recording = False
+        self._pending = None
 
     def on_step(self, event):
         if not self._recording:
             return
-        if event.get("type") != "tool_call":
-            return
+        event_type = event.get("type")
         data = event.get("data", {})
-        tool_name = data.get("name", "")
-        args = dict(data.get("args") or {})
 
-        step = {"tool": tool_name, "params": args}
+        if event_type == "tool_call":
+            tool_name = data.get("name", "")
+            args = dict(data.get("args") or {})
+            step = {"tool": tool_name, "params": args}
+            # Keep the raw PyQGIS code separately so it can be displayed in the editor.
+            if tool_name == "run_pyqgis_code" and "code" in args:
+                step["code"] = args["code"]
+            # Hold every tool call until we know whether it succeeded.
+            self._pending = step
 
-        # Keep the raw PyQGIS code separately so it can be displayed in the editor.
-        if tool_name == "run_pyqgis_code" and "code" in args:
-            step["code"] = args["code"]
+        elif event_type == "tool_result":
+            # Tool succeeded — commit it.
+            if self._pending is not None:
+                self.steps.append(self._pending)
+                self._pending = None
 
-        self.steps.append(step)
+        elif event_type == "tool_error":
+            # Tool failed — discard it silently.
+            self._pending = None
 
     # ------------------------------------------------------------------
     # Variable detection

@@ -155,6 +155,20 @@ class OptionsDialog(QDialog):
         self.chk_canvas_capture.setChecked(self.settings.get_canvas_capture_enabled())
         self.layout.addWidget(self.chk_canvas_capture)
 
+        # --- Windows CA bundle ---
+        self.chk_windows_ca = QCheckBox()
+        self.chk_windows_ca.setChecked(self.settings.get_use_windows_ca_bundle())
+        self.chk_windows_ca.toggled.connect(self.update_visibility)
+        self.layout.addWidget(self.chk_windows_ca)
+
+        self.ca_encoding_layout = QHBoxLayout()
+        self.ca_encoding_label = QLabel()
+        self.ca_encoding_input = QLineEdit()
+        self.ca_encoding_input.setText(self.settings.get_ca_bundle_cert_encoding())
+        self.ca_encoding_layout.addWidget(self.ca_encoding_label)
+        self.ca_encoding_layout.addWidget(self.ca_encoding_input)
+        self.layout.addLayout(self.ca_encoding_layout)
+
         # --- Action buttons ---
         self.btn_layout = QHBoxLayout()
         self.btn_test = QPushButton()
@@ -180,6 +194,32 @@ class OptionsDialog(QDialog):
         self.refresh_texts()
         self.update_visibility()
 
+
+    # --- Windows CA bundle refresh ---
+    def _refresh_ca_bundle(self):
+        cert_enc = self.ca_encoding_input.text().strip()
+        if not cert_enc:
+            QMessageBox.warning(
+                self, self.t.get("error", "Erreur"),
+                self.t.get("ca_bundle_encoding_empty", "Le champ d'encodage des certificats est vide.")
+            )
+            return False
+        try:
+            from ..core.cert_manager import refresh_ca_bundle
+            plugin_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            path, count = refresh_ca_bundle(plugin_dir, cert_encoding_filter=cert_enc)
+            self.settings.set_ca_bundle_path(path)
+            QMessageBox.information(
+                self, self.t.get("success", "Succès"),
+                self.t.get("ca_bundle_refreshed", "CA bundle mis à jour ({count} certificats exportés).").format(count=count)
+            )
+            return True
+        except Exception as e:
+            QMessageBox.critical(
+                self, self.t.get("error", "Erreur"),
+                self.t.get("ca_bundle_error", "Erreur lors de la mise à jour du CA bundle : {}").format(str(e))
+            )
+            return False
 
     # --- Trace export directory browser ---
     def browse_trace_dir(self):
@@ -232,6 +272,11 @@ class OptionsDialog(QDialog):
         self.chk_canvas_capture.setText(self.t.get("canvas_capture_enabled", "Capture du canvas (vérification visuelle)"))
         self.chk_canvas_capture.setToolTip(self.t.get("canvas_capture_enabled_hint", ""))
 
+        self.chk_windows_ca.setText(self.t.get("use_windows_ca_bundle", "Utiliser les certificats Windows (CA bundle)"))
+        self.chk_windows_ca.setToolTip(self.t.get("use_windows_ca_bundle_hint", ""))
+        self.ca_encoding_label.setText(self.t.get("ca_bundle_cert_encoding", "Encodage des certificats :"))
+        self.ca_encoding_input.setToolTip(self.t.get("ca_bundle_cert_encoding_hint", ""))
+
 
 
     def change_language(self):
@@ -247,6 +292,10 @@ class OptionsDialog(QDialog):
         self.trace_path_label.setEnabled(trace_on)
         self.trace_path_edit.setEnabled(trace_on)
         self.trace_path_browse.setEnabled(trace_on)
+
+        ca_on = self.chk_windows_ca.isChecked()
+        self.ca_encoding_label.setVisible(ca_on)
+        self.ca_encoding_input.setVisible(ca_on)
 
     # -------------------------
     # Actions
@@ -270,7 +319,8 @@ class OptionsDialog(QDialog):
                 "model": model,
                 "messages": [{"role": "user", "content": "ping"}]
             }
-            response = requests.post(url, json=payload, headers=headers, timeout=10)
+            response = requests.post(url, json=payload, headers=headers, timeout=10,
+                                     verify=self.settings.get_ssl_verify())
             response.raise_for_status()
 
             # Some backends echo the model name in the response; use it to auto-fill the model field
@@ -321,6 +371,13 @@ class OptionsDialog(QDialog):
         self.settings.set_agent_show_steps(self.chk_agent_show_steps.isChecked())
         self.settings.set_canvas_capture_enabled(self.chk_canvas_capture.isChecked())
 
+        # Windows CA bundle
+        ca_enabled = self.chk_windows_ca.isChecked()
+        self.settings.set_use_windows_ca_bundle(ca_enabled)
+        cert_enc = self.ca_encoding_input.text().strip()
+        self.settings.set_ca_bundle_cert_encoding(cert_enc)
+        if ca_enabled:
+            self._refresh_ca_bundle()
 
         self.accept()
 

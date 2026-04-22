@@ -9,16 +9,18 @@
 #   - Variable table: detected params with editable label + type selector
 #   - Per-step code editor for run_pyqgis_code steps
 #   - Preview of the final JSON
+#   - Edit mode: load an existing .aiprocess.json for modification
+#   - Save / Save As buttons
 
 import json
 import os
+import re
 
 from qgis.PyQt.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QFormLayout,
     QLineEdit, QTextEdit, QPlainTextEdit, QPushButton, QLabel,
     QTableWidget, QTableWidgetItem, QComboBox, QTabWidget,
-    QWidget, QHeaderView, QMessageBox, QFileDialog, QSplitter,
-    QDialogButtonBox,
+    QWidget, QHeaderView, QMessageBox, QFileDialog, QScrollArea,
 )
 from qgis.PyQt.QtCore import Qt
 from qgis.PyQt.QtGui import QFont
@@ -30,17 +32,18 @@ except Exception:
     _HAS_CODE_EDITOR = False
 
 from ..core.process_recorder import ProcessRecorder
-from ..core.process_runner import save_process
+from ..core.process_runner import save_process, overwrite_process
+from ..utils.translation import get_translations
 
 
 _VAR_TYPES = ["layer", "field", "file", "crs", "value", "code"]
-_VAR_TYPE_LABELS = {
-    "layer": "Couche",
-    "field": "Champ",
-    "file": "Fichier",
-    "crs": "SCR",
-    "value": "Valeur",
-    "code": "Code PyQGIS",
+_VAR_TYPE_KEYS = {
+    "layer": "process_vartype_layer",
+    "field": "process_vartype_field",
+    "file":  "process_vartype_file",
+    "crs":   "process_vartype_crs",
+    "value": "process_vartype_value",
+    "code":  "process_vartype_code",
 }
 
 
@@ -50,76 +53,147 @@ class ProcessSaveDialog(QDialog):
     reusable custom process.
     """
 
-    def __init__(self, recorder: ProcessRecorder, base_folder: str, parent=None):
+    def __init__(self, recorder_or_dict, base_folder: str,
+                 source_path: str = None, language: str = "fr", parent=None):
+        """
+        recorder_or_dict : ProcessRecorder (new process) OR dict (editing an existing process).
+        source_path      : path of the existing .aiprocess.json to overwrite on save (edit mode).
+        language         : "fr" or "en" for all UI labels.
+        """
         super().__init__(parent)
-        self.setWindowTitle("Enregistrer comme traitement personnalisé")
         self.setMinimumSize(700, 560)
-        self.recorder = recorder
         self.base_folder = base_folder
+        self._source_path = source_path
+        self._code_var_map: dict = {}  # step_idx → var_id, populated in edit mode
+        self._t = get_translations(language)
 
-        # Detect variables from the recorder
-        self._variables = recorder.detect_variables()
-        self._steps = list(recorder.steps)
+        if isinstance(recorder_or_dict, dict):
+            self.recorder = None
+            self.setWindowTitle(self._t["process_save_dlg_title_edit"])
+            self._load_from_process_dict(recorder_or_dict)
+        else:
+            self.recorder = recorder_or_dict
+            self.setWindowTitle(self._t["process_save_dlg_title_new"])
+            self._variables = recorder_or_dict.detect_variables()
+            self._steps = list(recorder_or_dict.steps)
 
         self._build_ui()
         self._populate_variables()
         self._populate_steps()
+
+        # Pre-fill info fields when editing an existing process
+        if isinstance(recorder_or_dict, dict):
+            self._name_edit.setText(recorder_or_dict.get("name", ""))
+            self._desc_edit.setPlainText(recorder_or_dict.get("description", ""))
+            self._folder_edit.setText(recorder_or_dict.get("folder", ""))
+
+    def _load_from_process_dict(self, process_dict: dict):
+        """
+        Reconstruct self._steps and self._variables from an existing .aiprocess.json dict.
+        Variable refs are rebuilt by scanning step params for {v_xxx} placeholders.
+        For run_pyqgis_code steps the {v_xxx} code reference is resolved to the actual
+        code string for display in the editor.
+        """
+        raw_vars = process_dict.get("variables", [])
+        var_by_id = {v["id"]: dict(v, refs=[]) for v in raw_vars}
+        self._variables = list(var_by_id.values())
+
+        self._steps = []
+        self._code_var_map = {}
+
+        for step_idx, raw_step in enumerate(process_dict.get("steps", [])):
+            step = {"tool": raw_step["tool"], "params": dict(raw_step.get("params", {}))}
+
+            # Reconstruct refs from params
+            for key, value in step["params"].items():
+                if isinstance(value, str):
+                    m = re.match(r'^\{(v_[a-zA-Z0-9_]+)\}$', value)
+                    if m and m.group(1) in var_by_id:
+                        var_by_id[m.group(1)]["refs"].append((step_idx, key))
+
+            # Handle the code field: resolve {v_xxx} → actual code for display
+            if "code" in raw_step:
+                code_val = raw_step["code"]
+                if isinstance(code_val, str):
+                    m = re.match(r'^\{(v_[a-zA-Z0-9_]+)\}$', code_val)
+                    if m and m.group(1) in var_by_id:
+                        var_id = m.group(1)
+                        self._code_var_map[step_idx] = var_id
+                        var_by_id[var_id]["refs"].append((step_idx, "code"))
+                        code_val = var_by_id[var_id].get("default", code_val)
+                step["code"] = code_val
+
+            self._steps.append(step)
 
     # ──────────────────────────────────────────────────────────
     # UI construction
     # ──────────────────────────────────────────────────────────
 
     def _build_ui(self):
+        t = self._t
         root = QVBoxLayout(self)
         root.setSpacing(8)
 
         tabs = QTabWidget()
         root.addWidget(tabs)
 
-        tabs.addTab(self._build_info_tab(), "Informations")
-        tabs.addTab(self._build_variables_tab(), "Variables")
-        tabs.addTab(self._build_steps_tab(), "Étapes / Code")
-        tabs.addTab(self._build_preview_tab(), "Aperçu JSON")
+        tabs.addTab(self._build_info_tab(),      t["process_tab_info"])
+        tabs.addTab(self._build_variables_tab(), t["process_tab_variables"])
+        tabs.addTab(self._build_steps_tab(),     t["process_tab_steps"])
+        tabs.addTab(self._build_preview_tab(),   t["process_tab_preview"])
 
         self._tabs = tabs
+        self._preview_tab_index = 3
         self._tabs.currentChanged.connect(self._on_tab_changed)
 
-        # Standard OK / Cancel buttons
-        btns = QDialogButtonBox(
-            QDialogButtonBox.Save | QDialogButtonBox.Cancel
-        )
-        btns.accepted.connect(self._on_save)
-        btns.rejected.connect(self.reject)
-        root.addWidget(btns)
+        # Action buttons
+        btn_row = QHBoxLayout()
+        btn_row.addStretch()
+
+        self._save_btn = QPushButton(t["process_btn_save"])
+        self._save_btn.setDefault(True)
+        self._save_btn.clicked.connect(self._on_save)
+        btn_row.addWidget(self._save_btn)
+
+        self._saveas_btn = QPushButton(t["process_btn_save_as"])
+        self._saveas_btn.clicked.connect(self._on_save_as)
+        btn_row.addWidget(self._saveas_btn)
+
+        cancel_btn = QPushButton(t["process_btn_cancel"])
+        cancel_btn.clicked.connect(self.reject)
+        btn_row.addWidget(cancel_btn)
+
+        root.addLayout(btn_row)
 
     def _build_info_tab(self) -> QWidget:
+        t = self._t
         w = QWidget()
         form = QFormLayout(w)
         form.setSpacing(8)
 
         self._name_edit = QLineEdit()
-        self._name_edit.setPlaceholderText("Ex : Reprojection + Export")
-        form.addRow("Nom du traitement :", self._name_edit)
+        self._name_edit.setPlaceholderText(t["process_name_placeholder"])
+        form.addRow(t["process_name_label"], self._name_edit)
 
         self._desc_edit = QTextEdit()
-        self._desc_edit.setPlaceholderText("Description courte (optionnelle)…")
+        self._desc_edit.setPlaceholderText(t["process_desc_placeholder"])
         self._desc_edit.setMaximumHeight(80)
-        form.addRow("Description :", self._desc_edit)
+        form.addRow(t["process_desc_label"], self._desc_edit)
 
         folder_row = QWidget()
         folder_layout = QHBoxLayout(folder_row)
         folder_layout.setContentsMargins(0, 0, 0, 0)
         self._folder_edit = QLineEdit()
-        self._folder_edit.setPlaceholderText("Ex : Vecteur/Géotraitement")
+        self._folder_edit.setPlaceholderText(t["process_folder_placeholder"])
         folder_layout.addWidget(self._folder_edit)
-        folder_browse_btn = QPushButton("Parcourir…")
+        folder_browse_btn = QPushButton(t["process_folder_browse_btn"])
         folder_browse_btn.setFixedWidth(90)
         folder_browse_btn.clicked.connect(self._browse_folder)
         folder_layout.addWidget(folder_browse_btn)
-        form.addRow("Dossier projet :", folder_row)
+        form.addRow(t["process_folder_label"], folder_row)
 
         info = QLabel(
-            f"<i>Les traitements sont enregistrés dans :<br>"
+            f"<i>{t['process_folder_info']}<br>"
             f"<code>{self.base_folder}</code></i>"
         )
         info.setWordWrap(True)
@@ -128,19 +202,22 @@ class ProcessSaveDialog(QDialog):
         return w
 
     def _build_variables_tab(self) -> QWidget:
+        t = self._t
         w = QWidget()
         layout = QVBoxLayout(w)
         layout.setSpacing(6)
 
-        note = QLabel(
-            "Variables détectées automatiquement.\n"
-            "Vous pouvez modifier les labels et les types."
-        )
+        note = QLabel(t["process_vars_note"])
         note.setWordWrap(True)
         layout.addWidget(note)
 
         self._var_table = QTableWidget(0, 4)
-        self._var_table.setHorizontalHeaderLabels(["ID", "Label utilisateur", "Type", "Valeur par défaut"])
+        self._var_table.setHorizontalHeaderLabels([
+            t["process_vars_col_id"],
+            t["process_vars_col_label"],
+            t["process_vars_col_type"],
+            t["process_vars_col_default"],
+        ])
         self._var_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
         self._var_table.horizontalHeader().setSectionResizeMode(3, QHeaderView.Stretch)
         self._var_table.setColumnWidth(0, 110)
@@ -148,9 +225,9 @@ class ProcessSaveDialog(QDialog):
         self._var_table.verticalHeader().setVisible(False)
         layout.addWidget(self._var_table)
 
-        add_btn = QPushButton("+ Ajouter une variable")
+        add_btn = QPushButton(t["process_vars_add_btn"])
         add_btn.clicked.connect(self._add_variable_row)
-        del_btn = QPushButton("Supprimer la sélection")
+        del_btn = QPushButton(t["process_vars_del_btn"])
         del_btn.clicked.connect(self._delete_selected_variable)
         btn_row = QHBoxLayout()
         btn_row.addWidget(add_btn)
@@ -161,13 +238,11 @@ class ProcessSaveDialog(QDialog):
         return w
 
     def _build_steps_tab(self) -> QWidget:
+        t = self._t
         w = QWidget()
         layout = QVBoxLayout(w)
 
-        note = QLabel(
-            "Étapes enregistrées. Pour les blocs de code PyQGIS, vous pouvez éditer "
-            "le code directement (il remplacera la valeur par défaut de la variable)."
-        )
+        note = QLabel(t["process_steps_note"])
         note.setWordWrap(True)
         layout.addWidget(note)
 
@@ -175,13 +250,12 @@ class ProcessSaveDialog(QDialog):
         scroll_widget = QWidget()
         scroll_widget.setLayout(self._steps_container)
 
-        from qgis.PyQt.QtWidgets import QScrollArea
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setWidget(scroll_widget)
         layout.addWidget(scroll)
 
-        self._code_editors: dict[int, object] = {}  # step_idx → editor widget
+        self._code_editors: dict = {}  # step_idx → editor widget
         return w
 
     def _build_preview_tab(self) -> QWidget:
@@ -189,8 +263,7 @@ class ProcessSaveDialog(QDialog):
         layout = QVBoxLayout(w)
         self._preview_edit = QPlainTextEdit()
         self._preview_edit.setReadOnly(True)
-        font = QFont("Courier New", 9)
-        self._preview_edit.setFont(font)
+        self._preview_edit.setFont(QFont("Courier New", 9))
         layout.addWidget(self._preview_edit)
         return w
 
@@ -204,6 +277,7 @@ class ProcessSaveDialog(QDialog):
             self._append_variable_row(var)
 
     def _append_variable_row(self, var: dict):
+        t = self._t
         row = self._var_table.rowCount()
         self._var_table.insertRow(row)
 
@@ -217,7 +291,7 @@ class ProcessSaveDialog(QDialog):
 
         type_combo = QComboBox()
         for vt in _VAR_TYPES:
-            type_combo.addItem(_VAR_TYPE_LABELS.get(vt, vt), vt)
+            type_combo.addItem(t.get(_VAR_TYPE_KEYS[vt], vt), vt)
         current_type = var.get("type", "value")
         idx = _VAR_TYPES.index(current_type) if current_type in _VAR_TYPES else 4
         type_combo.setCurrentIndex(idx)
@@ -227,6 +301,7 @@ class ProcessSaveDialog(QDialog):
         self._var_table.setItem(row, 3, default_item)
 
     def _populate_steps(self):
+        t = self._t
         # Clear previous widgets
         while self._steps_container.count():
             item = self._steps_container.takeAt(0)
@@ -244,11 +319,28 @@ class ProcessSaveDialog(QDialog):
             g_layout.setContentsMargins(8, 6, 8, 6)
             g_layout.setSpacing(4)
 
-            header = QLabel(f"<b>Étape {idx + 1}</b> — <code>{tool}</code>")
-            g_layout.addWidget(header)
+            # Header row: step label + delete button
+            header_row = QHBoxLayout()
+            header_row.setContentsMargins(0, 0, 0, 0)
+            header = QLabel(
+                f"<b>{t['process_step_header'].format(num=idx + 1)}</b>"
+                f" — <code>{tool}</code>"
+            )
+            header_row.addWidget(header, stretch=1)
+            del_btn = QPushButton("×")
+            del_btn.setFixedSize(22, 22)
+            del_btn.setToolTip(t["process_step_delete_tooltip"])
+            del_btn.setStyleSheet(
+                "QPushButton { color: #c00; font-weight: bold; border: 1px solid #c00; "
+                "border-radius: 3px; background: transparent; }"
+                "QPushButton:hover { background: #fdd; }"
+            )
+            del_btn.clicked.connect(lambda _checked, i=idx: self._delete_step(i))
+            header_row.addWidget(del_btn)
+            g_layout.addLayout(header_row)
 
             if tool == "run_pyqgis_code" and "code" in step:
-                lbl = QLabel("Code PyQGIS (éditable) :")
+                lbl = QLabel(t["process_step_code_label"])
                 g_layout.addWidget(lbl)
                 if _HAS_CODE_EDITOR:
                     editor = QgsCodeEditorPython()
@@ -261,7 +353,6 @@ class ProcessSaveDialog(QDialog):
                 g_layout.addWidget(editor)
                 self._code_editors[idx] = editor
             else:
-                # Show params as key: value lines
                 params_text = "\n".join(
                     f"  {k}: {v}" for k, v in params.items()
                     if k not in ("iface", "executor")
@@ -279,8 +370,7 @@ class ProcessSaveDialog(QDialog):
     # ──────────────────────────────────────────────────────────
 
     def _on_tab_changed(self, index: int):
-        # Refresh preview when the JSON tab is shown
-        if self._tabs.tabText(index) == "Aperçu JSON":
+        if index == self._preview_tab_index:
             self._refresh_preview()
 
     def _refresh_preview(self):
@@ -288,23 +378,29 @@ class ProcessSaveDialog(QDialog):
             d = self._build_dict()
             self._preview_edit.setPlainText(json.dumps(d, ensure_ascii=False, indent=2))
         except Exception as e:
-            self._preview_edit.setPlainText(f"Erreur : {e}")
+            self._preview_edit.setPlainText(
+                f"{self._t['process_error_title']} : {e}"
+            )
 
     def _browse_folder(self):
         path = QFileDialog.getExistingDirectory(
-            self, "Choisir un dossier de base", self.base_folder
+            self, self._t["process_browse_dlg_title"], self.base_folder
         )
         if path:
-            # Store the relative sub-folder name
             rel = os.path.relpath(path, self.base_folder)
             if rel.startswith(".."):
-                # Folder is outside base — use the leaf name
                 rel = os.path.basename(path)
             self._folder_edit.setText(rel)
 
     def _add_variable_row(self):
         new_id = f"v_value_{self._var_table.rowCount()}"
-        var = {"id": new_id, "label": "Nouvelle variable", "type": "value", "default": "", "refs": []}
+        var = {
+            "id": new_id,
+            "label": self._t["process_new_variable_label"],
+            "type": "value",
+            "default": "",
+            "refs": [],
+        }
         self._variables.append(var)
         self._append_variable_row(var)
 
@@ -313,47 +409,117 @@ class ProcessSaveDialog(QDialog):
         for row in rows:
             self._var_table.removeRow(row)
 
-    def _on_save(self):
-        name = self._name_edit.text().strip()
-        if not name:
-            QMessageBox.warning(self, "Nom manquant", "Veuillez saisir un nom pour le traitement.")
-            return
+    def _delete_step(self, step_idx: int):
+        """Remove a step and shift variable refs accordingly."""
+        self._sync_code_editors()
 
-        folder = self._folder_edit.text().strip() or "General"
-
-        # Sync edited code back into steps
-        for step_idx, editor in self._code_editors.items():
-            if step_idx < len(self._steps):
-                if _HAS_CODE_EDITOR:
-                    self._steps[step_idx]["code"] = editor.text()
+        for var in self._variables:
+            new_refs = []
+            for (si, pk) in var.get("refs", []):
+                if si == step_idx:
+                    continue
+                elif si > step_idx:
+                    new_refs.append((si - 1, pk))
                 else:
-                    self._steps[step_idx]["code"] = editor.toPlainText()
+                    new_refs.append((si, pk))
+            var["refs"] = new_refs
 
-        variables = self._collect_variables()
+        del self._steps[step_idx]
+        self._populate_steps()
 
+    def _sync_code_editors(self):
+        """Flush code editor content back into steps and their variable defaults in the table."""
+        for step_idx, editor in self._code_editors.items():
+            if step_idx >= len(self._steps):
+                continue
+            code = editor.text() if _HAS_CODE_EDITOR else editor.toPlainText()
+            self._steps[step_idx]["code"] = code
+            # Also update the variable default cell so _collect_variables picks up the edit.
+            for row in range(self._var_table.rowCount()):
+                id_item = self._var_table.item(row, 0)
+                if not id_item:
+                    continue
+                orig = id_item.data(Qt.UserRole) or {}
+                if any(si == step_idx and pk == "code"
+                       for si, pk in orig.get("refs", [])):
+                    default_item = self._var_table.item(row, 3)
+                    if default_item:
+                        default_item.setText(code)
+                    break
+
+    def _on_save(self):
+        process_dict = self._build_current_dict()
+        if process_dict is None:
+            return
+        t = self._t
         try:
-            process_dict = self.recorder.build_process_dict(
-                name=name,
-                description=self._desc_edit.toPlainText().strip(),
-                folder=folder,
-                variables=variables,
-            )
-            # Override steps with (potentially code-edited) steps
-            process_dict["steps"] = self._rebuild_templated_steps(variables)
-            filepath = save_process(process_dict, self.base_folder)
-            QMessageBox.information(
-                self, "Enregistré",
-                f"Traitement enregistré :\n{filepath}"
-            )
+            if self._source_path:
+                overwrite_process(process_dict, self._source_path)
+                QMessageBox.information(
+                    self, t["process_saved_title"],
+                    t["process_saved_updated"].format(path=self._source_path),
+                )
+            else:
+                filepath = save_process(process_dict, self.base_folder)
+                QMessageBox.information(
+                    self, t["process_saved_title"],
+                    t["process_saved_new"].format(path=filepath),
+                )
             self.accept()
         except Exception as e:
-            QMessageBox.critical(self, "Erreur", f"Impossible d'enregistrer :\n{e}")
+            QMessageBox.critical(
+                self, t["process_error_title"],
+                t["process_error_save"].format(error=e),
+            )
+
+    def _on_save_as(self):
+        """Always create a new file, regardless of whether we are in edit mode."""
+        process_dict = self._build_current_dict()
+        if process_dict is None:
+            return
+        t = self._t
+        try:
+            filepath = save_process(process_dict, self.base_folder)
+            QMessageBox.information(
+                self, t["process_saved_title"],
+                t["process_saved_new"].format(path=filepath),
+            )
+            self._source_path = filepath
+            self.accept()
+        except Exception as e:
+            QMessageBox.critical(
+                self, t["process_error_title"],
+                t["process_error_save"].format(error=e),
+            )
+
+    def _build_current_dict(self) -> dict:
+        """Validate inputs, sync editors and return the ready-to-save process dict, or None."""
+        t = self._t
+        name = self._name_edit.text().strip()
+        if not name:
+            QMessageBox.warning(
+                self, t["process_missing_name_title"], t["process_missing_name_msg"]
+            )
+            return None
+
+        folder = self._folder_edit.text().strip() or "General"
+        self._sync_code_editors()
+        variables = self._collect_variables()
+        steps = self._rebuild_templated_steps(variables)
+        return {
+            "version": 1,
+            "name": name,
+            "description": self._desc_edit.toPlainText().strip(),
+            "folder": folder,
+            "variables": [{k: v for k, v in var.items() if k != "refs"} for var in variables],
+            "steps": steps,
+        }
 
     # ──────────────────────────────────────────────────────────
     # Internal helpers
     # ──────────────────────────────────────────────────────────
 
-    def _collect_variables(self) -> list[dict]:
+    def _collect_variables(self) -> list:
         """Read back variable rows from the table into a list of dicts."""
         variables = []
         for row in range(self._var_table.rowCount()):
@@ -377,9 +543,9 @@ class ProcessSaveDialog(QDialog):
             })
         return variables
 
-    def _rebuild_templated_steps(self, variables: list[dict]) -> list[dict]:
+    def _rebuild_templated_steps(self, variables: list) -> list:
         """Rebuild the steps list with {v_xxx} placeholders."""
-        ref_map: dict[tuple, str] = {}
+        ref_map = {}
         for var in variables:
             for ref in var.get("refs", []):
                 ref_map[tuple(ref)] = var["id"]
@@ -411,7 +577,7 @@ class ProcessSaveDialog(QDialog):
         steps = self._rebuild_templated_steps(variables)
         return {
             "version": 1,
-            "name": self._name_edit.text().strip() or "Sans nom",
+            "name": self._name_edit.text().strip() or self._t["process_fallback_name"],
             "description": self._desc_edit.toPlainText().strip(),
             "folder": self._folder_edit.text().strip() or "General",
             "variables": [{k: v for k, v in var.items() if k != "refs"} for var in variables],

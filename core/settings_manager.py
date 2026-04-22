@@ -1,3 +1,4 @@
+import os
 from qgis.PyQt.QtCore import QSettings
 
 class SettingsManager:
@@ -189,3 +190,32 @@ class SettingsManager:
 
     def set_processes_folder(self, path: str):
         self.set("processes_folder", path or "")
+
+    # --- Windows CA bundle (on-premise HTTPS certificate fix) ---
+    def get_use_windows_ca_bundle(self) -> bool:
+        val = self.get("use_windows_ca_bundle", False)
+        return str(val).strip().lower() in ("1", "true", "yes", "on")
+
+    def set_use_windows_ca_bundle(self, enabled: bool):
+        self.set("use_windows_ca_bundle", bool(enabled))
+
+    def get_ca_bundle_cert_encoding(self) -> str:
+        return self.get("ca_bundle_cert_encoding", "")
+
+    def set_ca_bundle_cert_encoding(self, encoding: str):
+        self.set("ca_bundle_cert_encoding", encoding)
+
+    def get_ca_bundle_path(self) -> str:
+        return self.get("ca_bundle_path", "")
+
+    def set_ca_bundle_path(self, path: str):
+        self.set("ca_bundle_path", path or "")
+
+    def get_ssl_verify(self):
+        """Returns the requests verify param: True (default) or path to CA bundle."""
+        if not self.get_use_windows_ca_bundle():
+            return True
+        path = self.get_ca_bundle_path()
+        if path and os.path.isfile(path):
+            return path
+        return True

@@ -110,7 +110,8 @@ class AIAgent:
 
                 resp = requests.post(
                     api_url, json=payload_stream, headers=hdrs,
-                    timeout=300, stream=True
+                    timeout=300, stream=True,
+                    verify=self.settings.get_ssl_verify()
                 )
 
                 elapsed = round(time.time() - t0, 3)
@@ -189,7 +190,8 @@ class AIAgent:
                     try:
                         if self._supports_zero_max_tokens(api_url):
                             payload_usage = {"model": model, "messages": built_messages, "max_tokens": 0}
-                            r2 = requests.post(api_url, json=payload_usage, headers=headers, timeout=15)
+                            r2 = requests.post(api_url, json=payload_usage, headers=headers, timeout=15,
+                                               verify=self.settings.get_ssl_verify())
                             if r2.ok:
                                 j2 = r2.json()
                                 if isinstance(j2, dict):
@@ -202,7 +204,8 @@ class AIAgent:
                                 "max_tokens": 1,
                                 "temperature": 0,
                             }
-                            r2 = requests.post(api_url, json=payload_usage, headers=headers, timeout=15)
+                            r2 = requests.post(api_url, json=payload_usage, headers=headers, timeout=15,
+                                               verify=self.settings.get_ssl_verify())
                             if r2.ok:
                                 j2 = r2.json()
                                 if isinstance(j2, dict):
@@ -218,7 +221,8 @@ class AIAgent:
 
 
             # --- Non-streaming mode: single blocking POST request.
-            resp = requests.post(api_url, json=payload, headers=headers, timeout=300)
+            resp = requests.post(api_url, json=payload, headers=headers, timeout=300,
+                                 verify=self.settings.get_ssl_verify())
             trace = {
                 "when": time.strftime("%Y-%m-%d %H:%M:%S"),
                 "elapsed_sec": round(time.time() - t0, 3),

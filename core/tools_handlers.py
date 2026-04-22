@@ -609,6 +609,242 @@ def set_graduated_style(layer_name: str, field_name: str,
         return _err("set_graduated_style", str(e))
 
 
+def _get_all_symbols(renderer):
+    """Return all symbols from any renderer type (single, categorized, graduated, rule-based)."""
+    from qgis.core import (QgsSingleSymbolRenderer, QgsCategorizedSymbolRenderer,
+                           QgsGraduatedSymbolRenderer, QgsRuleBasedRenderer)
+    if isinstance(renderer, QgsSingleSymbolRenderer):
+        sym = renderer.symbol()
+        return [sym] if sym else []
+    if isinstance(renderer, QgsCategorizedSymbolRenderer):
+        return [cat.symbol() for cat in renderer.categories() if cat.symbol()]
+    if isinstance(renderer, QgsGraduatedSymbolRenderer):
+        return [r.symbol() for r in renderer.ranges() if r.symbol()]
+    if isinstance(renderer, QgsRuleBasedRenderer):
+        syms = []
+        def _collect(rule):
+            if rule.symbol():
+                syms.append(rule.symbol())
+            for child in rule.children():
+                _collect(child)
+        _collect(renderer.rootRule())
+        return syms
+    return []
+
+
+def set_symbol_properties(layer_name: str,
+                           size: float = None,
+                           stroke_color: str = None,
+                           stroke_width: float = None,
+                           stroke_style: str = None) -> dict:
+    """Modify size, stroke color/width/style on the existing symbol(s) of a layer."""
+    from qgis.core import (QgsVectorLayer, QgsSimpleMarkerSymbolLayer,
+                           QgsSimpleLineSymbolLayer, QgsSimpleFillSymbolLayer)
+    from qgis.PyQt.QtGui import QColor
+    from qgis.PyQt.QtCore import Qt
+
+    STROKE_STYLE_MAP = {
+        "solid":    Qt.SolidLine,
+        "dash":     Qt.DashLine,
+        "dot":      Qt.DotLine,
+        "dash_dot": Qt.DashDotLine,
+        "no_line":  Qt.NoPen,
+    }
+
+    layer = _get_layer(layer_name)
+    if not layer or not isinstance(layer, QgsVectorLayer):
+        return _err("set_symbol_properties", f"Couche vecteur introuvable : {layer_name}")
+
+    renderer = layer.renderer()
+    if renderer is None:
+        return _err("set_symbol_properties", "Aucun renderer sur cette couche")
+
+    try:
+        symbols = _get_all_symbols(renderer)
+        if not symbols:
+            return _err("set_symbol_properties", "Aucun symbole trouvable dans le renderer")
+
+        applied_types = set()
+        for sym in symbols:
+            for i in range(sym.symbolLayerCount()):
+                sl = sym.symbolLayer(i)
+
+                if isinstance(sl, QgsSimpleMarkerSymbolLayer):
+                    if size is not None:
+                        sl.setSize(size)
+                    if stroke_color is not None:
+                        sl.setStrokeColor(QColor(stroke_color))
+                    if stroke_width is not None:
+                        sl.setStrokeWidth(stroke_width)
+                    if stroke_style is not None:
+                        sl.setStrokeStyle(STROKE_STYLE_MAP.get(stroke_style, Qt.SolidLine))
+                    applied_types.add("marker")
+
+                elif isinstance(sl, QgsSimpleLineSymbolLayer):
+                    if size is not None:
+                        sl.setWidth(size)
+                    if stroke_color is not None:
+                        sl.setColor(QColor(stroke_color))
+                    if stroke_style is not None:
+                        sl.setPenStyle(STROKE_STYLE_MAP.get(stroke_style, Qt.SolidLine))
+                    applied_types.add("line")
+
+                elif isinstance(sl, QgsSimpleFillSymbolLayer):
+                    if stroke_color is not None:
+                        sl.setStrokeColor(QColor(stroke_color))
+                    if stroke_width is not None:
+                        sl.setStrokeWidth(stroke_width)
+                    if stroke_style is not None:
+                        sl.setStrokeStyle(STROKE_STYLE_MAP.get(stroke_style, Qt.SolidLine))
+                    applied_types.add("fill")
+
+        layer.triggerRepaint()
+        return _ok("set_symbol_properties",
+                   layer=layer_name,
+                   applied_to=list(applied_types),
+                   symbol_count=len(symbols))
+    except Exception:
+        return _err("set_symbol_properties", traceback.format_exc())
+
+
+def set_marker_shape(layer_name: str, shape: str) -> dict:
+    """Change the marker shape for a point layer (circle, square, diamond, etc.)."""
+    from qgis.core import QgsVectorLayer, QgsSimpleMarkerSymbolLayer
+
+    layer = _get_layer(layer_name)
+    if not layer or not isinstance(layer, QgsVectorLayer):
+        return _err("set_marker_shape", f"Couche vecteur introuvable : {layer_name}")
+    if layer.geometryType() != 0:
+        return _err("set_marker_shape", "Cette couche n'est pas de type Point")
+
+    SHAPE_NAME_MAP = {
+        "circle":   "Circle",
+        "square":   "Square",
+        "diamond":  "Diamond",
+        "triangle": "Triangle",
+        "star":     "Star",
+        "cross":    "Cross",
+        "x":        "Cross2",
+        "arrow":    "Arrow",
+    }
+    shape_attr = SHAPE_NAME_MAP.get(shape)
+    if shape_attr is None:
+        return _err("set_marker_shape", f"Forme inconnue : {shape}")
+
+    try:
+        try:
+            target_shape = getattr(QgsSimpleMarkerSymbolLayer.Shape, shape_attr)
+        except AttributeError:
+            target_shape = getattr(QgsSimpleMarkerSymbolLayer, shape_attr)
+
+        renderer = layer.renderer()
+        symbols = _get_all_symbols(renderer)
+        count = 0
+        for sym in symbols:
+            for i in range(sym.symbolLayerCount()):
+                sl = sym.symbolLayer(i)
+                if isinstance(sl, QgsSimpleMarkerSymbolLayer):
+                    sl.setShape(target_shape)
+                    count += 1
+
+        layer.triggerRepaint()
+        return _ok("set_marker_shape",
+                   layer=layer_name, shape=shape, updated_symbol_layers=count)
+    except Exception:
+        return _err("set_marker_shape", traceback.format_exc())
+
+
+def set_rule_based_style(layer_name: str, rules: list) -> dict:
+    """Apply a rule-based renderer with multiple expression-driven rules."""
+    from qgis.core import (QgsVectorLayer, QgsRuleBasedRenderer, QgsSymbol,
+                           QgsSimpleMarkerSymbolLayer, QgsSimpleLineSymbolLayer,
+                           QgsSimpleFillSymbolLayer)
+    from qgis.PyQt.QtGui import QColor
+
+    layer = _get_layer(layer_name)
+    if not layer or not isinstance(layer, QgsVectorLayer):
+        return _err("set_rule_based_style", f"Couche vecteur introuvable : {layer_name}")
+    if not rules:
+        return _err("set_rule_based_style", "La liste de règles est vide")
+
+    try:
+        root_rule = QgsRuleBasedRenderer.Rule(None)
+
+        for r in rules:
+            expression  = r.get("expression", "")
+            color       = r.get("color", "#888888")
+            label       = r.get("label", expression or "Défaut")
+            size        = r.get("size")
+            stroke_clr  = r.get("stroke_color")
+            stroke_w    = r.get("stroke_width")
+
+            symbol = QgsSymbol.defaultSymbol(layer.geometryType())
+            symbol.setColor(QColor(color))
+
+            for i in range(symbol.symbolLayerCount()):
+                sl = symbol.symbolLayer(i)
+                if size is not None:
+                    if isinstance(sl, QgsSimpleMarkerSymbolLayer):
+                        sl.setSize(size)
+                    elif isinstance(sl, QgsSimpleLineSymbolLayer):
+                        sl.setWidth(size)
+                if stroke_clr:
+                    if hasattr(sl, "setStrokeColor"):
+                        sl.setStrokeColor(QColor(stroke_clr))
+                if stroke_w is not None:
+                    if hasattr(sl, "setStrokeWidth"):
+                        sl.setStrokeWidth(stroke_w)
+
+            rule = QgsRuleBasedRenderer.Rule(symbol)
+            if expression:
+                rule.setFilterExpression(expression)
+            rule.setLabel(label)
+            root_rule.appendChild(rule)
+
+        layer.setRenderer(QgsRuleBasedRenderer(root_rule))
+        layer.triggerRepaint()
+        return _ok("set_rule_based_style", layer=layer_name, rule_count=len(rules))
+    except Exception:
+        return _err("set_rule_based_style", traceback.format_exc())
+
+
+def set_custom_categorized_colors(layer_name: str, field_name: str,
+                                   color_map: dict,
+                                   default_color: str = "#AAAAAA") -> dict:
+    """Apply a categorized renderer with precise per-value color control."""
+    from qgis.core import (QgsVectorLayer, QgsCategorizedSymbolRenderer,
+                           QgsRendererCategory, QgsSymbol)
+    from qgis.PyQt.QtGui import QColor
+
+    layer = _get_layer(layer_name)
+    if not layer or not isinstance(layer, QgsVectorLayer):
+        return _err("set_custom_categorized_colors",
+                    f"Couche vecteur introuvable : {layer_name}")
+    idx = layer.fields().indexFromName(field_name)
+    if idx == -1:
+        return _err("set_custom_categorized_colors",
+                    f"Champ introuvable : {field_name}")
+
+    try:
+        unique_vals = list(layer.uniqueValues(idx))
+        categories = []
+        for val in unique_vals:
+            color = color_map.get(str(val), default_color)
+            symbol = QgsSymbol.defaultSymbol(layer.geometryType())
+            symbol.setColor(QColor(color))
+            label = str(val) if val is not None else "NULL"
+            categories.append(QgsRendererCategory(val, symbol, label))
+
+        layer.setRenderer(QgsCategorizedSymbolRenderer(field_name, categories))
+        layer.triggerRepaint()
+        return _ok("set_custom_categorized_colors",
+                   layer=layer_name,
+                   field=field_name,
+                   category_count=len(categories))
+    except Exception:
+        return _err("set_custom_categorized_colors", traceback.format_exc())
+
+
 def set_layer_opacity(layer_name: str, opacity: float) -> dict:
     """Set layer opacity from 0.0 (fully transparent) to 1.0 (fully opaque)."""
     layer = _get_layer(layer_name)
@@ -822,6 +1058,454 @@ def check_geometry_validity(layer_name: str) -> dict:
                    invalid_count=invalid.featureCount() if invalid else 0)
     except Exception as e:
         return _err("check_geometry_validity", str(e))
+
+
+# ══════════════════════════════════════════════════════════════
+# CATEGORY: LABELING
+# ══════════════════════════════════════════════════════════════
+
+_PLACEMENT_STR_TO_INT = {
+    "around_point": 0,
+    "over_point":   1,
+    "line":         2,
+    "curved":       3,
+    "horizontal":   4,
+    "free":         5,
+    "perimeter":    7,
+}
+
+_PLACEMENT_INT_TO_STR = {v: k for k, v in _PLACEMENT_STR_TO_INT.items()}
+
+
+def _placement_enum(name: str):
+    """Return the correct QGIS LabelPlacement enum value for a placement name.
+
+    QGIS 3.26+ uses Qgis.LabelPlacement enum; older versions used int-backed
+    QgsPalLayerSettings class attributes.  We try both.
+    """
+    from qgis.core import QgsPalLayerSettings
+
+    _ATTR_MAP = {
+        "around_point": "AroundPoint",
+        "over_point":   "OverPoint",
+        "line":         "Line",
+        "curved":       "Curved",
+        "horizontal":   "Horizontal",
+        "free":         "Free",
+        "perimeter":    "PerimeterCurved",
+    }
+    attr = _ATTR_MAP.get(name, "AroundPoint")
+
+    # Try Qgis.LabelPlacement (QGIS 3.26+)
+    try:
+        from qgis.core import Qgis
+        return getattr(Qgis.LabelPlacement, attr)
+    except AttributeError:
+        pass
+
+    # Fall back to QgsPalLayerSettings class attributes (QGIS 3.22-3.25)
+    return getattr(QgsPalLayerSettings, attr, 0)
+
+
+def _placement_name(value) -> str:
+    """Convert a placement enum/int back to its string name."""
+    try:
+        return _PLACEMENT_INT_TO_STR.get(int(value), str(value))
+    except (TypeError, ValueError):
+        return str(value)
+
+
+def _get_pal_settings(layer):
+    """Return a mutable copy of QgsPalLayerSettings from the layer's labeling, or a fresh one."""
+    from qgis.core import QgsPalLayerSettings
+    if layer.labeling() and hasattr(layer.labeling(), "settings"):
+        return layer.labeling().settings()
+    return QgsPalLayerSettings()
+
+
+def _apply_pal_settings(layer, settings):
+    """Wrap QgsPalLayerSettings back onto the layer and trigger repaint."""
+    from qgis.core import QgsVectorLayerSimpleLabeling
+    layer.setLabeling(QgsVectorLayerSimpleLabeling(settings))
+    layer.triggerRepaint()
+
+
+def get_label_settings(layer_name: str) -> dict:
+    """Return the current labeling configuration of a vector layer."""
+    from qgis.core import QgsVectorLayer
+
+    layer = _get_layer(layer_name)
+    if not layer or not isinstance(layer, QgsVectorLayer):
+        return _err("get_label_settings", f"Couche vecteur introuvable : {layer_name}")
+
+    if not layer.labeling():
+        return _ok("get_label_settings",
+                   layer=layer_name,
+                   enabled=False,
+                   message="Aucun étiquetage configuré sur cette couche")
+
+    try:
+        settings = layer.labeling().settings()
+        fmt = settings.format()
+        buf = fmt.buffer()
+        shadow = fmt.shadow()
+
+        return _ok("get_label_settings",
+                   layer=layer_name,
+                   enabled=layer.labelsEnabled(),
+                   field_name=settings.fieldName,
+                   is_expression=settings.isExpression,
+                   placement=_placement_name(settings.placement),
+                   font_family=fmt.font().family(),
+                   font_size=fmt.size(),
+                   color=fmt.color().name(),
+                   bold=fmt.font().bold(),
+                   italic=fmt.font().italic(),
+                   buffer_enabled=buf.enabled(),
+                   buffer_size=buf.size(),
+                   buffer_color=buf.color().name(),
+                   shadow_enabled=shadow.enabled())
+    except Exception:
+        return _err("get_label_settings", traceback.format_exc())
+
+
+def enable_labels(layer_name: str, field_name: str,
+                  font_size: float = 10,
+                  font_family: str = "Arial",
+                  color: str = "#000000",
+                  bold: bool = False,
+                  italic: bool = False,
+                  placement: str = None) -> dict:
+    """Enable labeling on a vector layer with key formatting in a single call."""
+    from qgis.core import (QgsVectorLayer, QgsPalLayerSettings,
+                           QgsTextFormat, QgsUnitTypes)
+    from qgis.PyQt.QtGui import QFont, QColor
+
+    layer = _get_layer(layer_name)
+    if not layer or not isinstance(layer, QgsVectorLayer):
+        return _err("enable_labels", f"Couche vecteur introuvable : {layer_name}")
+
+    idx = layer.fields().indexFromName(field_name)
+    if idx == -1:
+        return _err("enable_labels",
+                    f"Champ introuvable : {field_name}. Utiliser get_layer_fields d'abord.")
+
+    try:
+        settings = QgsPalLayerSettings()
+        settings.fieldName = field_name
+        settings.isExpression = False
+        settings.enabled = True
+
+        if placement is None:
+            geom = layer.geometryType()
+            placement = "around_point" if geom == 0 else "curved" if geom == 1 else "horizontal"
+        settings.placement = _placement_enum(placement)
+
+        text_format = QgsTextFormat()
+        font = QFont(font_family)
+        font.setPointSizeF(font_size)
+        font.setBold(bold)
+        font.setItalic(italic)
+        text_format.setFont(font)
+        text_format.setSize(font_size)
+        text_format.setSizeUnit(QgsUnitTypes.RenderPoints)
+        text_format.setColor(QColor(color))
+        settings.setFormat(text_format)
+
+        _apply_pal_settings(layer, settings)
+        layer.setLabelsEnabled(True)
+
+        return _ok("enable_labels",
+                   layer=layer_name,
+                   field=field_name,
+                   font=font_family,
+                   size=font_size,
+                   color=color,
+                   placement=placement)
+    except Exception:
+        return _err("enable_labels", traceback.format_exc())
+
+
+def disable_labels(layer_name: str) -> dict:
+    """Disable labeling on a vector layer."""
+    from qgis.core import QgsVectorLayer
+
+    layer = _get_layer(layer_name)
+    if not layer or not isinstance(layer, QgsVectorLayer):
+        return _err("disable_labels", f"Couche vecteur introuvable : {layer_name}")
+
+    layer.setLabelsEnabled(False)
+    layer.triggerRepaint()
+    return _ok("disable_labels", layer=layer_name)
+
+
+def set_label_text_format(layer_name: str,
+                           font_family: str = None,
+                           font_size: float = None,
+                           color: str = None,
+                           bold: bool = None,
+                           italic: bool = None,
+                           underline: bool = None,
+                           opacity: float = None) -> dict:
+    """Modify text formatting of existing layer labels."""
+    from qgis.core import QgsVectorLayer
+    from qgis.PyQt.QtGui import QFont, QColor
+
+    layer = _get_layer(layer_name)
+    if not layer or not isinstance(layer, QgsVectorLayer):
+        return _err("set_label_text_format", f"Couche vecteur introuvable : {layer_name}")
+    if not layer.labeling():
+        return _err("set_label_text_format",
+                    "Aucune étiquette configurée. Utiliser enable_labels d'abord.")
+
+    try:
+        settings = _get_pal_settings(layer)
+        text_format = settings.format()
+        font = text_format.font()
+
+        if font_family is not None:
+            font.setFamily(font_family)
+        if font_size is not None:
+            font.setPointSizeF(font_size)
+            text_format.setSize(font_size)
+        if bold is not None:
+            font.setBold(bold)
+        if italic is not None:
+            font.setItalic(italic)
+        if underline is not None:
+            font.setUnderline(underline)
+        if color is not None:
+            text_format.setColor(QColor(color))
+        if opacity is not None:
+            text_format.setOpacity(max(0.0, min(1.0, opacity)))
+
+        text_format.setFont(font)
+        settings.setFormat(text_format)
+        _apply_pal_settings(layer, settings)
+
+        return _ok("set_label_text_format",
+                   layer=layer_name,
+                   font=font.family(),
+                   size=font.pointSizeF(),
+                   color=text_format.color().name())
+    except Exception:
+        return _err("set_label_text_format", traceback.format_exc())
+
+
+def set_label_buffer(layer_name: str,
+                     enabled: bool = True,
+                     size: float = 1.0,
+                     color: str = "#FFFFFF",
+                     opacity: float = 1.0) -> dict:
+    """Configure the text halo/buffer around layer labels."""
+    from qgis.core import (QgsVectorLayer, QgsTextBufferSettings, QgsUnitTypes)
+    from qgis.PyQt.QtGui import QColor
+
+    layer = _get_layer(layer_name)
+    if not layer or not isinstance(layer, QgsVectorLayer):
+        return _err("set_label_buffer", f"Couche vecteur introuvable : {layer_name}")
+    if not layer.labeling():
+        return _err("set_label_buffer",
+                    "Aucune étiquette configurée. Utiliser enable_labels d'abord.")
+
+    try:
+        settings = _get_pal_settings(layer)
+        text_format = settings.format()
+
+        buf = QgsTextBufferSettings()
+        buf.setEnabled(enabled)
+        buf.setSize(size)
+        buf.setSizeUnit(QgsUnitTypes.RenderMillimeters)
+        buf.setColor(QColor(color))
+        buf.setOpacity(max(0.0, min(1.0, opacity)))
+
+        text_format.setBuffer(buf)
+        settings.setFormat(text_format)
+        _apply_pal_settings(layer, settings)
+
+        return _ok("set_label_buffer",
+                   layer=layer_name,
+                   enabled=enabled, size=size, color=color, opacity=opacity)
+    except Exception:
+        return _err("set_label_buffer", traceback.format_exc())
+
+
+def set_label_placement(layer_name: str,
+                        placement: str,
+                        offset_x: float = 0,
+                        offset_y: float = 0,
+                        min_scale: float = 0,
+                        max_scale: float = 0) -> dict:
+    """Change label placement mode, offset, and optional scale-based visibility."""
+    from qgis.core import QgsVectorLayer, QgsUnitTypes
+
+    layer = _get_layer(layer_name)
+    if not layer or not isinstance(layer, QgsVectorLayer):
+        return _err("set_label_placement", f"Couche vecteur introuvable : {layer_name}")
+    if not layer.labeling():
+        return _err("set_label_placement",
+                    "Aucune étiquette configurée. Utiliser enable_labels d'abord.")
+
+    if placement not in _PLACEMENT_STR_TO_INT:
+        return _err("set_label_placement", f"Placement inconnu : {placement}")
+
+    try:
+        settings = _get_pal_settings(layer)
+        settings.placement = _placement_enum(placement)
+
+        if offset_x != 0 or offset_y != 0:
+            settings.offsetUnits = QgsUnitTypes.RenderMillimeters
+            settings.xOffset = offset_x
+            settings.yOffset = offset_y
+
+        if min_scale > 0 or max_scale > 0:
+            settings.scaleVisibility = True
+            if min_scale > 0:
+                settings.minimumScale = min_scale
+            if max_scale > 0:
+                settings.maximumScale = max_scale
+
+        _apply_pal_settings(layer, settings)
+
+        return _ok("set_label_placement",
+                   layer=layer_name,
+                   placement=placement,
+                   offset_x=offset_x, offset_y=offset_y)
+    except Exception:
+        return _err("set_label_placement", traceback.format_exc())
+
+
+def set_label_expression(layer_name: str, expression: str) -> dict:
+    """Use a QGIS expression as the label text source instead of a plain field."""
+    from qgis.core import QgsVectorLayer, QgsExpression
+
+    layer = _get_layer(layer_name)
+    if not layer or not isinstance(layer, QgsVectorLayer):
+        return _err("set_label_expression", f"Couche vecteur introuvable : {layer_name}")
+    if not layer.labeling():
+        return _err("set_label_expression",
+                    "Aucune étiquette configurée. Utiliser enable_labels d'abord.")
+
+    expr = QgsExpression(expression)
+    if expr.hasParserError():
+        return _err("set_label_expression",
+                    f"Expression invalide : {expr.parserErrorString()}")
+
+    try:
+        settings = _get_pal_settings(layer)
+        settings.fieldName = expression
+        settings.isExpression = True
+        _apply_pal_settings(layer, settings)
+
+        return _ok("set_label_expression", layer=layer_name, expression=expression)
+    except Exception:
+        return _err("set_label_expression", traceback.format_exc())
+
+
+def set_label_shadow(layer_name: str,
+                     enabled: bool = True,
+                     color: str = "#000000",
+                     opacity: float = 0.7,
+                     blur_radius: float = 1.5,
+                     offset_distance: float = 1.0,
+                     offset_angle: int = 315) -> dict:
+    """Add or remove a drop shadow from layer labels."""
+    from qgis.core import (QgsVectorLayer, QgsTextShadowSettings, QgsUnitTypes)
+    from qgis.PyQt.QtGui import QColor
+
+    layer = _get_layer(layer_name)
+    if not layer or not isinstance(layer, QgsVectorLayer):
+        return _err("set_label_shadow", f"Couche vecteur introuvable : {layer_name}")
+    if not layer.labeling():
+        return _err("set_label_shadow",
+                    "Aucune étiquette configurée. Utiliser enable_labels d'abord.")
+
+    try:
+        settings = _get_pal_settings(layer)
+        text_format = settings.format()
+
+        shadow = QgsTextShadowSettings()
+        shadow.setEnabled(enabled)
+        shadow.setColor(QColor(color))
+        shadow.setOpacity(max(0.0, min(1.0, opacity)))
+        shadow.setBlurRadius(blur_radius)
+        shadow.setBlurUnit(QgsUnitTypes.RenderMillimeters)
+        shadow.setOffsetDistance(offset_distance)
+        shadow.setOffsetUnit(QgsUnitTypes.RenderMillimeters)
+        shadow.setOffsetAngle(offset_angle)
+
+        text_format.setShadow(shadow)
+        settings.setFormat(text_format)
+        _apply_pal_settings(layer, settings)
+
+        return _ok("set_label_shadow",
+                   layer=layer_name,
+                   enabled=enabled, color=color,
+                   blur_radius=blur_radius, offset_distance=offset_distance)
+    except Exception:
+        return _err("set_label_shadow", traceback.format_exc())
+
+
+_BACKGROUND_SHAPES = {
+    "rectangle": "ShapeRectangle",
+    "square":    "ShapeSquare",
+    "ellipse":   "ShapeEllipse",
+    "circle":    "ShapeCircle",
+}
+
+
+def set_label_background(layer_name: str,
+                         enabled: bool = True,
+                         shape_type: str = "rectangle",
+                         fill_color: str = "#FFFFFF",
+                         stroke_color: str = "#000000",
+                         stroke_width: float = 0.3,
+                         size_x: float = 1.0,
+                         size_y: float = 0.5,
+                         opacity: float = 1.0) -> dict:
+    """Add a filled shape background behind layer labels."""
+    from qgis.core import (QgsVectorLayer, QgsTextBackgroundSettings, QgsUnitTypes)
+    from qgis.PyQt.QtGui import QColor
+    from qgis.PyQt.QtCore import QSizeF
+
+    layer = _get_layer(layer_name)
+    if not layer or not isinstance(layer, QgsVectorLayer):
+        return _err("set_label_background", f"Couche vecteur introuvable : {layer_name}")
+    if not layer.labeling():
+        return _err("set_label_background",
+                    "Aucune étiquette configurée. Utiliser enable_labels d'abord.")
+
+    shape_attr = _BACKGROUND_SHAPES.get(shape_type.lower())
+    if shape_attr is None:
+        return _err("set_label_background",
+                    f"Forme inconnue : {shape_type}. Valeurs valides : {list(_BACKGROUND_SHAPES)}")
+
+    try:
+        settings = _get_pal_settings(layer)
+        text_format = settings.format()
+
+        bg = QgsTextBackgroundSettings()
+        bg.setEnabled(bool(enabled))
+        bg.setType(getattr(QgsTextBackgroundSettings, shape_attr))
+        bg.setFillColor(QColor(fill_color))
+        bg.setStrokeColor(QColor(stroke_color))
+        bg.setStrokeWidth(float(stroke_width))
+        bg.setStrokeWidthUnit(QgsUnitTypes.RenderMillimeters)
+        bg.setSize(QSizeF(float(size_x), float(size_y)))
+        bg.setSizeUnit(QgsUnitTypes.RenderMillimeters)
+        bg.setOpacity(max(0.0, min(1.0, float(opacity))))
+
+        text_format.setBackground(bg)
+        settings.setFormat(text_format)
+        _apply_pal_settings(layer, settings)
+
+        return _ok("set_label_background",
+                   layer=layer_name,
+                   enabled=enabled, shape_type=shape_type,
+                   fill_color=fill_color, stroke_color=stroke_color,
+                   size_x=size_x, size_y=size_y, opacity=opacity)
+    except Exception:
+        return _err("set_label_background", traceback.format_exc())
 
 
 # ══════════════════════════════════════════════════════════════

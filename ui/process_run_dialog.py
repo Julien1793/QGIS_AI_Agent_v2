@@ -5,6 +5,7 @@
 # then executes the steps via ProcessRunner and streams progress in the dialog.
 
 import os
+import threading
 
 from qgis.PyQt.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QFormLayout,
@@ -12,7 +13,7 @@ from qgis.PyQt.QtWidgets import (
     QTextEdit, QPlainTextEdit, QWidget, QDialogButtonBox,
     QScrollArea, QProgressBar, QFileDialog,
 )
-from qgis.PyQt.QtCore import Qt, QThread, QObject, pyqtSignal
+from qgis.PyQt.QtCore import Qt, QThread, QObject, pyqtSignal, pyqtSlot
 from qgis.PyQt.QtGui import QFont
 
 try:
@@ -35,7 +36,8 @@ from ..core.process_runner import ProcessRunner, load_process
 # ──────────────────────────────────────────────────────────────
 
 class _RunWorker(QObject):
-    progress = pyqtSignal(dict)   # step event
+    progress = pyqtSignal(dict)            # step event
+    tool_request = pyqtSignal(str, object) # (tool_name, args) → main thread
     finished = pyqtSignal()
 
     def __init__(self, runner: ProcessRunner, process_dict: dict, values: dict):
@@ -43,10 +45,27 @@ class _RunWorker(QObject):
         self._runner = runner
         self._process = process_dict
         self._values = values
+        self._tool_event = threading.Event()
+        self._tool_result = None
+
+    def receive_tool_result(self, result: dict):
+        """Called from the main thread to post the tool result back."""
+        self._tool_result = result
+        self._tool_event.set()
 
     def run(self):
+        def tool_executor(tool_name, args):
+            self._tool_event.clear()
+            self._tool_result = None
+            self.tool_request.emit(tool_name, dict(args))
+            if not self._tool_event.wait(timeout=120):
+                return {"success": False, "tool": tool_name,
+                        "error": "Timeout — outil sans réponse après 120 s"}
+            return self._tool_result
+
         try:
-            for event in self._runner.run(self._process, self._values):
+            for event in self._runner.run(self._process, self._values,
+                                          tool_executor=tool_executor):
                 self.progress.emit(event)
         except Exception as e:
             self.progress.emit({"type": "tool_error", "text": f"Erreur : {e}", "data": {}})
@@ -235,9 +254,17 @@ class ProcessRunDialog(QDialog):
 
         self._worker.progress.connect(self._on_progress, Qt.QueuedConnection)
         self._worker.finished.connect(self._on_finished, Qt.QueuedConnection)
+        self._worker.tool_request.connect(self._on_tool_request, Qt.QueuedConnection)
         self._thread.started.connect(self._worker.run)
         self._thread.finished.connect(self._thread.deleteLater)
         self._thread.start()
+
+    @pyqtSlot(str, object)
+    def _on_tool_request(self, tool_name: str, args: object):
+        """Execute a QGIS tool on the main thread and return the result to the worker."""
+        result = self.agent_loop._execute_tool(tool_name, args)
+        if self._worker:
+            self._worker.receive_tool_result(result)
 
     def _on_progress(self, event: dict):
         etype = event.get("type", "")

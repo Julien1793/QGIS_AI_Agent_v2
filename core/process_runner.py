@@ -81,6 +81,16 @@ def delete_process(filepath: str):
     os.remove(filepath)
 
 
+def overwrite_process(process_dict: dict, filepath: str) -> str:
+    """
+    Overwrite an existing process file at the given path.
+    Returns the filepath.
+    """
+    with open(filepath, "w", encoding="utf-8") as fh:
+        json.dump(process_dict, fh, ensure_ascii=False, indent=2)
+    return filepath
+
+
 # ──────────────────────────────────────────────────────────────
 # Runner
 # ──────────────────────────────────────────────────────────────
@@ -99,14 +109,21 @@ class ProcessRunner:
     def __init__(self, agent_loop):
         self._loop = agent_loop
 
-    def run(self, process_dict: dict, variable_values: dict):
+    def run(self, process_dict: dict, variable_values: dict, tool_executor=None):
         """
         Generator — yields progress event dicts as steps execute.
 
         variable_values: {variable_id: value_string}
+        tool_executor: optional callable(tool_name, args) -> dict that runs
+                       tool calls on the correct thread.  When omitted,
+                       _execute_tool is called directly (safe only on the
+                       main thread).
         """
         steps = process_dict.get("steps", [])
         total = len(steps)
+        variables = {v["id"]: v for v in process_dict.get("variables", [])}
+
+        execute_fn = tool_executor if tool_executor is not None else self._loop._execute_tool
 
         yield _evt("start", f"Démarrage du traitement « {process_dict.get('name', '')} » ({total} étapes)")
 
@@ -115,7 +132,7 @@ class ProcessRunner:
             raw_params = step.get("params", {})
 
             # Substitute {v_xxx} placeholders
-            params = _substitute(raw_params, variable_values)
+            params = _substitute(raw_params, variable_values, variables)
 
             # Handle run_pyqgis_code: also substitute the "code" field
             if tool_name == "run_pyqgis_code" and "code" in step:
@@ -126,7 +143,7 @@ class ProcessRunner:
                        f"Étape {idx + 1}/{total} : {tool_name}",
                        data={"name": tool_name, "args": params})
 
-            result = self._loop._execute_tool(tool_name, params)
+            result = execute_fn(tool_name, params)
 
             if result.get("success"):
                 yield _evt("tool_result",
@@ -149,14 +166,41 @@ class ProcessRunner:
 # Helpers
 # ──────────────────────────────────────────────────────────────
 
-def _substitute(params: dict, values: dict) -> dict:
+_PLACEHOLDER_RE = re.compile(r"^\{(v_[a-zA-Z0-9_]+)\}$")
+
+
+def _substitute(params: dict, values: dict, variables: dict = None) -> dict:
     result = {}
     for k, v in params.items():
         if isinstance(v, str):
-            result[k] = _substitute_str(v, values)
+            substituted = _substitute_str(v, values)
+            # When the entire value was a single placeholder, coerce back to
+            # the original type so handlers receive float/int/bool, not str.
+            m = _PLACEHOLDER_RE.match(v)
+            if m and variables:
+                default = variables.get(m.group(1), {}).get("default")
+                substituted = _coerce(substituted, default)
+            result[k] = substituted
         else:
             result[k] = v
     return result
+
+
+def _coerce(s: str, default):
+    """Cast string s to the same Python type as default."""
+    if isinstance(default, bool):
+        return s.lower() in ("true", "1", "yes")
+    if isinstance(default, int):
+        try:
+            return int(s)
+        except (ValueError, TypeError):
+            return s
+    if isinstance(default, float):
+        try:
+            return float(s)
+        except (ValueError, TypeError):
+            return s
+    return s
 
 
 def _substitute_str(s: str, values: dict) -> str:
