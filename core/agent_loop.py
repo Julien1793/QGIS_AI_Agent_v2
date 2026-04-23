@@ -174,7 +174,7 @@ class AgentLoop:
                     messages.append({
                         "role": "user",
                         "content": [
-                            {"type": "text", "text": "Voici la capture d'écran du canvas QGIS après l'opération :"},
+                            {"type": "text", "text": "Here is a screenshot of the QGIS canvas after the operation :"},
                             {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{b64}"}},
                         ],
                     })
