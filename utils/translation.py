@@ -70,6 +70,8 @@ def get_translations(lang):
             "agent_max_iterations_hint": "Nombre maximum d'étapes agent par requête.",
             "agent_show_steps": "Afficher les étapes en direct",
             "agent_show_steps_hint": "Affiche chaque appel d'outil et son résultat dans le chat.",
+            "agent_max_tokens": "Tokens max (réponse) :",
+            "agent_max_tokens_hint": "Nombre maximum de tokens générés par appel LLM en mode agent (sortie uniquement, n'affecte pas le contexte).",
             "canvas_capture_enabled": "Activer la capture du canvas (vérification visuelle)",
             "canvas_capture_enabled_hint": "Permet à l'agent de capturer le canvas QGIS pour vérifier visuellement les styles et étiquettes.",
 
@@ -128,7 +130,7 @@ def get_translations(lang):
             "connection_failed": "Erreur : {}",
             "verify_before_execute": "Vérifier le code avant d'exécuter",
             "include_project_context": "Inclure le contexte projet",
-            "project_context_max_kb": "Taille max (Ko) :",
+            "project_context_max_tokens": "Tokens contexte (entrée) :",
             "index_project": "Indexer projet",
             "project_indexed": "Projet indexé (couches, champs, CRS…)",
             "export_traces": "Exporter les requêtes (debug)",
@@ -137,6 +139,8 @@ def get_translations(lang):
             "choose_folder": "Choisir un dossier",
             "trace_dir_required": "Veuillez choisir un dossier d'export pour les traces.",
             "trace_dir_invalid": "Impossible d'utiliser ce dossier : {}",
+            "mode_local": "Local",
+            "mode_remote": "Distant",
             "streaming_mode": "Activer le mode streaming (SSE)",
             "streaming_hint": "Affiche la réponse en temps réel si l'API le supporte.",
 
@@ -308,6 +312,8 @@ def get_translations(lang):
             "agent_max_iterations_hint": "Maximum number of agent steps per request.",
             "agent_show_steps": "Show steps in real time",
             "agent_show_steps_hint": "Display each tool call and its result in the chat.",
+            "agent_max_tokens": "Max tokens (response):",
+            "agent_max_tokens_hint": "Maximum tokens generated per LLM call in agent mode (output only, does not affect context).",
             "canvas_capture_enabled": "Enable canvas capture (visual verification)",
             "canvas_capture_enabled_hint": "Allows the agent to capture the QGIS canvas to visually verify styles and labels.",
 
@@ -343,6 +349,7 @@ def get_translations(lang):
             "agent_result_features_info": "{returned} features returned out of {total}",
             "agent_result_zoom": "Zoomed to '{target}'",
             "agent_result_canvas_captured": "Map canvas captured ({width}×{height} px)",
+            "agent_vision_screenshot_intro": "Here is the screenshot of the QGIS canvas after the operation:",
             "agent_result_tools_expanded": "Tools added: {tools}",
 
             # Step labels
@@ -384,7 +391,8 @@ def get_translations(lang):
                 "- \"edit\"    : modify data (add/compute a field, load a layer)\n"
                 "- \"export\"  : export or save a layer\n"
                 "- \"analyse\" : spatial calculations, advanced statistics, quality check\n"
-                "- \"view\"    : zoom, navigate the map\n\n"
+                "- \"view\"    : zoom, navigate the map\n"
+                "- \"raster\"  : raster layer info, statistics, pseudocolor/grayscale style\n\n"
                 "Response format:\n"
                 "{{\"intents\": [\"intent1\", \"intent2\"], \"layer_names\": [\"mentioned layer name\"]}}\n\n"
                 "Request: {prompt}"
@@ -404,7 +412,7 @@ def get_translations(lang):
             "connection_failed": "Error: {}",
             "verify_before_execute": "Review code before running",
             "include_project_context": "Include project context",
-            "project_context_max_kb": "Max size (KB):",
+            "project_context_max_tokens": "Context tokens (input):",
             "index_project": "Index project",
             "project_indexed": "Project indexed (layers, fields, CRS…)",
             "export_traces": "Export requests (debug)",
@@ -413,6 +421,8 @@ def get_translations(lang):
             "choose_folder": "Choose a folder",
             "trace_dir_required": "Please choose an export folder for traces.",
             "trace_dir_invalid": "Cannot use this folder: {}",
+            "mode_local": "Local",
+            "mode_remote": "Remote",
             "streaming_mode": "Enable streaming mode (SSE)",
             "streaming_hint": "Render the reply in real time if supported by the API.",
 

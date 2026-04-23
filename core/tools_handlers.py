@@ -62,7 +62,7 @@ def get_layer_info(layer_name: str) -> dict:
     from qgis.core import QgsVectorLayer
     layer = _get_layer(layer_name)
     if not layer:
-        return _err("get_layer_info", f"Couche introuvable : {layer_name}")
+        return _err("get_layer_info", f"Layer not found: {layer_name}")
     info = {
         "name": layer.name(),
         "crs": layer.crs().authid(),
@@ -85,9 +85,9 @@ def get_layer_fields(layer_name: str) -> dict:
     from qgis.core import QgsVectorLayer
     layer = _get_layer(layer_name)
     if not layer:
-        return _err("get_layer_fields", f"Couche introuvable : {layer_name}")
+        return _err("get_layer_fields", f"Layer not found: {layer_name}")
     if not isinstance(layer, QgsVectorLayer):
-        return _err("get_layer_fields", f"{layer_name} n'est pas une couche vecteur")
+        return _err("get_layer_fields", f"{layer_name} is not a vector layer")
     fields = [
         {"name": f.name(), "type": f.typeName(), "alias": f.alias()}
         for f in layer.fields()
@@ -102,9 +102,9 @@ def get_layer_features(layer_name: str,
     from qgis.core import QgsVectorLayer, QgsFeatureRequest
     layer = _get_layer(layer_name)
     if not layer:
-        return _err("get_layer_features", f"Couche introuvable : {layer_name}")
+        return _err("get_layer_features", f"Layer not found: {layer_name}")
     if not isinstance(layer, QgsVectorLayer):
-        return _err("get_layer_features", f"{layer_name} n'est pas une couche vecteur")
+        return _err("get_layer_features", f"{layer_name} is not a vector layer")
 
     req = QgsFeatureRequest()
     if filter_expression:
@@ -129,7 +129,7 @@ def get_layer_statistics(layer_name: str, field_name: str) -> dict:
     import processing
     layer = _get_layer(layer_name)
     if not layer:
-        return _err("get_layer_statistics", f"Couche introuvable : {layer_name}")
+        return _err("get_layer_statistics", f"Layer not found: {layer_name}")
     try:
         result = processing.run("native:basicstatisticsforfields", {
             "INPUT": layer,
@@ -153,10 +153,10 @@ def get_unique_values(layer_name: str, field_name: str) -> dict:
     from qgis.core import QgsVectorLayer
     layer = _get_layer(layer_name)
     if not layer or not isinstance(layer, QgsVectorLayer):
-        return _err("get_unique_values", f"Couche vecteur introuvable : {layer_name}")
+        return _err("get_unique_values", f"Vector layer not found: {layer_name}")
     idx = layer.fields().indexFromName(field_name)
     if idx == -1:
-        return _err("get_unique_values", f"Champ introuvable : {field_name}")
+        return _err("get_unique_values", f"Field not found: {field_name}")
     values = sorted([str(v) for v in layer.uniqueValues(idx)])
     return _ok("get_unique_values",
                layer=layer_name,
@@ -170,7 +170,7 @@ def get_selected_features(layer_name: str) -> dict:
     from qgis.core import QgsVectorLayer
     layer = _get_layer(layer_name)
     if not layer or not isinstance(layer, QgsVectorLayer):
-        return _err("get_selected_features", f"Couche vecteur introuvable : {layer_name}")
+        return _err("get_selected_features", f"Vector layer not found: {layer_name}")
     field_names = [f.name() for f in layer.fields()]
     features = [
         {name: feat[name] for name in field_names}
@@ -186,7 +186,7 @@ def get_layer_extent(layer_name: str) -> dict:
     """Return the bounding box extent of a layer."""
     layer = _get_layer(layer_name)
     if not layer:
-        return _err("get_layer_extent", f"Couche introuvable : {layer_name}")
+        return _err("get_layer_extent", f"Layer not found: {layer_name}")
     ext = layer.extent()
     return _ok("get_layer_extent",
                layer=layer_name,
@@ -209,7 +209,7 @@ def _run_algo(tool_name: str, algorithm: str, params: dict,
         result = processing.run(algorithm, params)
         out = result.get("OUTPUT")
         if out is None:
-            return _err(tool_name, "L'algorithme n'a retourné aucune couche OUTPUT")
+            return _err(tool_name, "The algorithm returned no OUTPUT layer")
         out.setName(output_layer_name)
         QgsProject.instance().addMapLayer(out)
         return _ok(tool_name,
@@ -227,7 +227,7 @@ def buffer(layer_name: str, distance: float,
            output_layer_name: str = "buffer_result") -> dict:
     layer = _get_layer(layer_name)
     if not layer:
-        return _err("buffer", f"Couche introuvable : {layer_name}")
+        return _err("buffer", f"Layer not found: {layer_name}")
     feature_count_in = layer.featureCount()
     result = _run_algo("buffer", "native:buffer", {
         "INPUT": layer,
@@ -248,9 +248,9 @@ def clip(layer_name: str, overlay_layer_name: str,
     layer = _get_layer(layer_name)
     overlay = _get_layer(overlay_layer_name)
     if not layer:
-        return _err("clip", f"Couche introuvable : {layer_name}")
+        return _err("clip", f"Layer not found: {layer_name}")
     if not overlay:
-        return _err("clip", f"Couche de découpe introuvable : {overlay_layer_name}")
+        return _err("clip", f"Clip layer not found: {overlay_layer_name}")
     return _run_algo("clip", "native:clip",
                      {"INPUT": layer, "OVERLAY": overlay},
                      output_layer_name)
@@ -261,7 +261,7 @@ def intersection(layer_name: str, overlay_layer_name: str,
     layer = _get_layer(layer_name)
     overlay = _get_layer(overlay_layer_name)
     if not layer or not overlay:
-        return _err("intersection", "Couche(s) introuvable(s)")
+        return _err("intersection", "Layer(s) not found")
     return _run_algo("intersection", "native:intersection",
                      {"INPUT": layer, "OVERLAY": overlay,
                       "INPUT_FIELDS": [], "OVERLAY_FIELDS": []},
@@ -272,7 +272,7 @@ def dissolve(layer_name: str, field: str = "",
              output_layer_name: str = "dissolve_result") -> dict:
     layer = _get_layer(layer_name)
     if not layer:
-        return _err("dissolve", f"Couche introuvable : {layer_name}")
+        return _err("dissolve", f"Layer not found: {layer_name}")
     return _run_algo("dissolve", "native:dissolve",
                      {"INPUT": layer, "FIELD": [field] if field else []},
                      output_layer_name)
@@ -283,10 +283,10 @@ def reproject_layer(layer_name: str, target_crs: str,
     from qgis.core import QgsCoordinateReferenceSystem
     layer = _get_layer(layer_name)
     if not layer:
-        return _err("reproject_layer", f"Couche introuvable : {layer_name}")
+        return _err("reproject_layer", f"Layer not found: {layer_name}")
     crs = QgsCoordinateReferenceSystem(target_crs)
     if not crs.isValid():
-        return _err("reproject_layer", f"CRS invalide : {target_crs}")
+        return _err("reproject_layer", f"Invalid CRS: {target_crs}")
     return _run_algo("reproject_layer", "native:reprojectlayer",
                      {"INPUT": layer, "TARGET_CRS": crs},
                      output_layer_name)
@@ -302,7 +302,7 @@ def join_by_location(layer_name: str, join_layer_name: str,
     layer = _get_layer(layer_name)
     join_layer = _get_layer(join_layer_name)
     if not layer or not join_layer:
-        return _err("join_by_location", "Couche(s) introuvable(s)")
+        return _err("join_by_location", "Layer(s) not found")
     return _run_algo("join_by_location", "native:joinattributesbylocation", {
         "INPUT": layer,
         "JOIN": join_layer,
@@ -318,7 +318,7 @@ def centroids(layer_name: str,
               output_layer_name: str = "centroids_result") -> dict:
     layer = _get_layer(layer_name)
     if not layer:
-        return _err("centroids", f"Couche introuvable : {layer_name}")
+        return _err("centroids", f"Layer not found: {layer_name}")
     return _run_algo("centroids", "native:centroids",
                      {"INPUT": layer, "ALL_PARTS": False},
                      output_layer_name)
@@ -329,7 +329,7 @@ def difference(layer_name: str, overlay_layer_name: str,
     layer = _get_layer(layer_name)
     overlay = _get_layer(overlay_layer_name)
     if not layer or not overlay:
-        return _err("difference", "Couche(s) introuvable(s)")
+        return _err("difference", "Layer(s) not found")
     return _run_algo("difference", "native:difference",
                      {"INPUT": layer, "OVERLAY": overlay},
                      output_layer_name)
@@ -340,7 +340,7 @@ def union(layer_name: str, overlay_layer_name: str,
     layer = _get_layer(layer_name)
     overlay = _get_layer(overlay_layer_name)
     if not layer or not overlay:
-        return _err("union", "Couche(s) introuvable(s)")
+        return _err("union", "Layer(s) not found")
     return _run_algo("union", "native:union",
                      {"INPUT": layer, "OVERLAY": overlay},
                      output_layer_name)
@@ -350,10 +350,126 @@ def fix_geometries(layer_name: str,
                    output_layer_name: str = "fixed_geometries") -> dict:
     layer = _get_layer(layer_name)
     if not layer:
-        return _err("fix_geometries", f"Couche introuvable : {layer_name}")
+        return _err("fix_geometries", f"Layer not found: {layer_name}")
     return _run_algo("fix_geometries", "native:fixgeometries",
                      {"INPUT": layer},
                      output_layer_name)
+
+
+def extract_by_expression(layer_name: str, expression: str,
+                          output_layer_name: str = "extract_result") -> dict:
+    """Create a new layer with features matching a QGIS expression."""
+    from qgis.core import QgsExpression
+    layer = _get_layer(layer_name)
+    if not layer:
+        return _err("extract_by_expression", f"Layer not found: {layer_name}")
+    expr = QgsExpression(expression)
+    if expr.hasParserError():
+        return _err("extract_by_expression",
+                    f"Invalid expression: {expr.parserErrorString()}")
+    return _run_algo("extract_by_expression", "native:extractbyexpression", {
+        "INPUT": layer,
+        "EXPRESSION": expression,
+    }, output_layer_name)
+
+
+def extract_by_location(layer_name: str, intersect_layer_name: str,
+                        predicate: int = 0,
+                        output_layer_name: str = "extract_location_result") -> dict:
+    """Create a new layer with features that spatially match another layer."""
+    layer = _get_layer(layer_name)
+    intersect_layer = _get_layer(intersect_layer_name)
+    if not layer:
+        return _err("extract_by_location", f"Layer not found: {layer_name}")
+    if not intersect_layer:
+        return _err("extract_by_location",
+                    f"Intersection layer not found: {intersect_layer_name}")
+    return _run_algo("extract_by_location", "native:extractbylocation", {
+        "INPUT": layer,
+        "PREDICATE": [predicate],
+        "INTERSECT": intersect_layer,
+    }, output_layer_name)
+
+
+def merge_layers(layer_names: list,
+                 output_layer_name: str = "merged_result") -> dict:
+    """Merge multiple vector layers of the same geometry type into one."""
+    import processing
+    from qgis.core import QgsProject
+    layers = []
+    missing = []
+    for name in layer_names:
+        lyr = _get_layer(name)
+        if lyr:
+            layers.append(lyr)
+        else:
+            missing.append(name)
+    if missing:
+        return _err("merge_layers", f"Layer(s) not found: {', '.join(missing)}")
+    if len(layers) < 2:
+        return _err("merge_layers", "At least 2 layers are required to merge")
+    try:
+        result = processing.run("native:mergevectorlayers", {
+            "LAYERS": layers,
+            "CRS": layers[0].crs(),
+            "OUTPUT": "memory:",
+        })
+        out = result.get("OUTPUT")
+        if out is None:
+            return _err("merge_layers", "Algorithm returned no OUTPUT layer")
+        out.setName(output_layer_name)
+        QgsProject.instance().addMapLayer(out)
+        return _ok("merge_layers",
+                   merged_layers=layer_names,
+                   output_layer=output_layer_name,
+                   feature_count_out=out.featureCount(),
+                   added_to_project=True)
+    except Exception:
+        return _err("merge_layers", traceback.format_exc())
+
+
+def join_by_field(layer_name: str, join_layer_name: str,
+                  layer_field: str, join_field: str,
+                  join_fields: list = None,
+                  discard_nonmatching: bool = False,
+                  prefix: str = "",
+                  output_layer_name: str = "joined_result") -> dict:
+    """Attribute join between two layers based on a common field value."""
+    layer = _get_layer(layer_name)
+    join_layer = _get_layer(join_layer_name)
+    if not layer:
+        return _err("join_by_field", f"Layer not found: {layer_name}")
+    if not join_layer:
+        return _err("join_by_field", f"Join layer not found: {join_layer_name}")
+    return _run_algo("join_by_field", "native:joinattributestable", {
+        "INPUT": layer,
+        "FIELD": layer_field,
+        "INPUT_2": join_layer,
+        "FIELD_2": join_field,
+        "FIELDS_TO_COPY": join_fields or [],
+        "METHOD": 1,
+        "DISCARD_NONMATCHING": discard_nonmatching,
+        "PREFIX": prefix,
+    }, output_layer_name)
+
+
+def count_points_in_polygon(polygon_layer_name: str, point_layer_name: str,
+                             count_field_name: str = "NUMPOINTS",
+                             output_layer_name: str = "count_result") -> dict:
+    """Count points inside each polygon and store the count as a new field."""
+    poly_layer = _get_layer(polygon_layer_name)
+    point_layer = _get_layer(point_layer_name)
+    if not poly_layer:
+        return _err("count_points_in_polygon",
+                    f"Polygon layer not found: {polygon_layer_name}")
+    if not point_layer:
+        return _err("count_points_in_polygon",
+                    f"Point layer not found: {point_layer_name}")
+    return _run_algo("count_points_in_polygon", "native:countpointsinpolygon", {
+        "POLYGONS": poly_layer,
+        "POINTS": point_layer,
+        "FIELD": count_field_name,
+    }, output_layer_name)
 
 
 def run_processing_algorithm(algorithm: str, layer_name: str,
@@ -364,7 +480,7 @@ def run_processing_algorithm(algorithm: str, layer_name: str,
     from qgis.core import QgsProject
     layer = _get_layer(layer_name)
     if not layer:
-        return _err("run_processing_algorithm", f"Couche introuvable : {layer_name}")
+        return _err("run_processing_algorithm", f"Layer not found: {layer_name}")
     params = dict(parameters)
     params["INPUT"] = layer
     params["OUTPUT"] = "memory:"
@@ -373,7 +489,7 @@ def run_processing_algorithm(algorithm: str, layer_name: str,
         out = result.get("OUTPUT")
         if out is None:
             return _err("run_processing_algorithm",
-                        f"Aucune couche OUTPUT retournée par {algorithm}")
+                        f"No OUTPUT layer returned by {algorithm}")
         out.setName(output_layer_name)
         QgsProject.instance().addMapLayer(out)
         return _ok("run_processing_algorithm",
@@ -394,7 +510,7 @@ def select_by_expression(layer_name: str, expression: str) -> dict:
     from qgis.core import QgsVectorLayer, QgsFeatureRequest
     layer = _get_layer(layer_name)
     if not layer or not isinstance(layer, QgsVectorLayer):
-        return _err("select_by_expression", f"Couche vecteur introuvable : {layer_name}")
+        return _err("select_by_expression", f"Vector layer not found: {layer_name}")
     layer.selectByExpression(expression)
     return _ok("select_by_expression",
                layer=layer_name,
@@ -414,10 +530,10 @@ def select_by_location(layer_name: str, intersect_layer_name: str,
     layer = _get_layer(layer_name)
     intersect_layer = _get_layer(intersect_layer_name)
     if not layer:
-        return _err("select_by_location", f"Couche introuvable : {layer_name}")
+        return _err("select_by_location", f"Layer not found: {layer_name}")
     if not intersect_layer:
         return _err("select_by_location",
-                    f"Couche d'intersection introuvable : {intersect_layer_name}")
+                    f"Intersection layer not found: {intersect_layer_name}")
     try:
         processing.run("native:selectbylocation", {
             "INPUT": layer,
@@ -443,15 +559,38 @@ def set_layer_filter(layer_name: str, expression: str) -> dict:
     from qgis.core import QgsVectorLayer
     layer = _get_layer(layer_name)
     if not layer or not isinstance(layer, QgsVectorLayer):
-        return _err("set_layer_filter", f"Couche vecteur introuvable : {layer_name}")
+        return _err("set_layer_filter", f"Vector layer not found: {layer_name}")
     ok = layer.setSubsetString(expression)
     if not ok:
         return _err("set_layer_filter",
-                    f"Expression invalide : {expression}")
+                    f"Invalid expression: {expression}")
     return _ok("set_layer_filter",
                layer=layer_name,
-               filter=expression or "(aucun)",
+               filter=expression or "(none)",
                visible_count=layer.featureCount())
+
+
+def clear_selection(layer_name: str) -> dict:
+    """Remove all selected features on a layer."""
+    from qgis.core import QgsVectorLayer
+    layer = _get_layer(layer_name)
+    if not layer or not isinstance(layer, QgsVectorLayer):
+        return _err("clear_selection", f"Vector layer not found: {layer_name}")
+    layer.removeSelection()
+    return _ok("clear_selection", layer=layer_name)
+
+
+def invert_selection(layer_name: str) -> dict:
+    """Invert the current selection on a layer."""
+    from qgis.core import QgsVectorLayer
+    layer = _get_layer(layer_name)
+    if not layer or not isinstance(layer, QgsVectorLayer):
+        return _err("invert_selection", f"Vector layer not found: {layer_name}")
+    layer.invertSelection()
+    return _ok("invert_selection",
+               layer=layer_name,
+               selected_count=layer.selectedFeatureCount(),
+               total_count=layer.featureCount())
 
 
 def zoom_to_layer(layer_name: str, iface=None) -> dict:
@@ -459,7 +598,7 @@ def zoom_to_layer(layer_name: str, iface=None) -> dict:
     from qgis.core import QgsProject
     layer = _get_layer(layer_name)
     if not layer:
-        return _err("zoom_to_layer", f"Couche introuvable : {layer_name}")
+        return _err("zoom_to_layer", f"Layer not found: {layer_name}")
     if iface:
         iface.mapCanvas().setExtent(layer.extent())
         iface.mapCanvas().refresh()
@@ -471,11 +610,11 @@ def zoom_to_feature(layer_name: str, feature_id: int, iface=None) -> dict:
     from qgis.core import QgsVectorLayer, QgsFeatureRequest
     layer = _get_layer(layer_name)
     if not layer or not isinstance(layer, QgsVectorLayer):
-        return _err("zoom_to_feature", f"Couche vecteur introuvable : {layer_name}")
+        return _err("zoom_to_feature", f"Vector layer not found: {layer_name}")
     req = QgsFeatureRequest().setFilterFid(feature_id)
     feats = list(layer.getFeatures(req))
     if not feats:
-        return _err("zoom_to_feature", f"Feature {feature_id} introuvable")
+        return _err("zoom_to_feature", f"Feature {feature_id} not found")
     if iface:
         iface.mapCanvas().setExtent(feats[0].geometry().boundingBox())
         iface.mapCanvas().refresh()
@@ -493,7 +632,7 @@ def get_layer_style(layer_name: str) -> dict:
                            QgsGraduatedSymbolRenderer)
     layer = _get_layer(layer_name)
     if not layer or not isinstance(layer, QgsVectorLayer):
-        return _err("get_layer_style", f"Couche vecteur introuvable : {layer_name}")
+        return _err("get_layer_style", f"Vector layer not found: {layer_name}")
     renderer = layer.renderer()
     if renderer is None:
         return _ok("get_layer_style", layer=layer_name, renderer_type="none")
@@ -525,7 +664,7 @@ def set_single_symbol(layer_name: str, color: str,
     from qgis.PyQt.QtGui import QColor
     layer = _get_layer(layer_name)
     if not layer or not isinstance(layer, QgsVectorLayer):
-        return _err("set_single_symbol", f"Couche vecteur introuvable : {layer_name}")
+        return _err("set_single_symbol", f"Vector layer not found: {layer_name}")
     try:
         symbol = QgsSymbol.defaultSymbol(layer.geometryType())
         symbol.setColor(QColor(color))
@@ -552,11 +691,11 @@ def set_categorized_style(layer_name: str, field_name: str,
     layer = _get_layer(layer_name)
     if not layer or not isinstance(layer, QgsVectorLayer):
         return _err("set_categorized_style",
-                    f"Couche vecteur introuvable : {layer_name}")
+                    f"Vector layer not found: {layer_name}")
     idx = layer.fields().indexFromName(field_name)
     if idx == -1:
         return _err("set_categorized_style",
-                    f"Champ introuvable : {field_name}")
+                    f"Field not found: {field_name}")
     try:
         unique_vals = list(layer.uniqueValues(idx))
         categories = []
@@ -589,7 +728,7 @@ def set_graduated_style(layer_name: str, field_name: str,
     layer = _get_layer(layer_name)
     if not layer or not isinstance(layer, QgsVectorLayer):
         return _err("set_graduated_style",
-                    f"Couche vecteur introuvable : {layer_name}")
+                    f"Vector layer not found: {layer_name}")
     try:
         style = QgsStyle.defaultStyle()
         ramp = style.colorRamp(color_ramp_name)
@@ -653,16 +792,16 @@ def set_symbol_properties(layer_name: str,
 
     layer = _get_layer(layer_name)
     if not layer or not isinstance(layer, QgsVectorLayer):
-        return _err("set_symbol_properties", f"Couche vecteur introuvable : {layer_name}")
+        return _err("set_symbol_properties", f"Vector layer not found: {layer_name}")
 
     renderer = layer.renderer()
     if renderer is None:
-        return _err("set_symbol_properties", "Aucun renderer sur cette couche")
+        return _err("set_symbol_properties", "No renderer on this layer")
 
     try:
         symbols = _get_all_symbols(renderer)
         if not symbols:
-            return _err("set_symbol_properties", "Aucun symbole trouvable dans le renderer")
+            return _err("set_symbol_properties", "No symbol found in renderer")
 
         applied_types = set()
         for sym in symbols:
@@ -713,9 +852,9 @@ def set_marker_shape(layer_name: str, shape: str) -> dict:
 
     layer = _get_layer(layer_name)
     if not layer or not isinstance(layer, QgsVectorLayer):
-        return _err("set_marker_shape", f"Couche vecteur introuvable : {layer_name}")
+        return _err("set_marker_shape", f"Vector layer not found: {layer_name}")
     if layer.geometryType() != 0:
-        return _err("set_marker_shape", "Cette couche n'est pas de type Point")
+        return _err("set_marker_shape", "This layer is not a Point layer")
 
     SHAPE_NAME_MAP = {
         "circle":   "Circle",
@@ -729,7 +868,7 @@ def set_marker_shape(layer_name: str, shape: str) -> dict:
     }
     shape_attr = SHAPE_NAME_MAP.get(shape)
     if shape_attr is None:
-        return _err("set_marker_shape", f"Forme inconnue : {shape}")
+        return _err("set_marker_shape", f"Unknown shape: {shape}")
 
     try:
         try:
@@ -763,9 +902,9 @@ def set_rule_based_style(layer_name: str, rules: list) -> dict:
 
     layer = _get_layer(layer_name)
     if not layer or not isinstance(layer, QgsVectorLayer):
-        return _err("set_rule_based_style", f"Couche vecteur introuvable : {layer_name}")
+        return _err("set_rule_based_style", f"Vector layer not found: {layer_name}")
     if not rules:
-        return _err("set_rule_based_style", "La liste de règles est vide")
+        return _err("set_rule_based_style", "The rules list is empty")
 
     try:
         root_rule = QgsRuleBasedRenderer.Rule(None)
@@ -773,7 +912,7 @@ def set_rule_based_style(layer_name: str, rules: list) -> dict:
         for r in rules:
             expression  = r.get("expression", "")
             color       = r.get("color", "#888888")
-            label       = r.get("label", expression or "Défaut")
+            label       = r.get("label", expression or "Default")
             size        = r.get("size")
             stroke_clr  = r.get("stroke_color")
             stroke_w    = r.get("stroke_width")
@@ -819,11 +958,11 @@ def set_custom_categorized_colors(layer_name: str, field_name: str,
     layer = _get_layer(layer_name)
     if not layer or not isinstance(layer, QgsVectorLayer):
         return _err("set_custom_categorized_colors",
-                    f"Couche vecteur introuvable : {layer_name}")
+                    f"Vector layer not found: {layer_name}")
     idx = layer.fields().indexFromName(field_name)
     if idx == -1:
         return _err("set_custom_categorized_colors",
-                    f"Champ introuvable : {field_name}")
+                    f"Field not found: {field_name}")
 
     try:
         unique_vals = list(layer.uniqueValues(idx))
@@ -849,7 +988,7 @@ def set_layer_opacity(layer_name: str, opacity: float) -> dict:
     """Set layer opacity from 0.0 (fully transparent) to 1.0 (fully opaque)."""
     layer = _get_layer(layer_name)
     if not layer:
-        return _err("set_layer_opacity", f"Couche introuvable : {layer_name}")
+        return _err("set_layer_opacity", f"Layer not found: {layer_name}")
     layer.setOpacity(max(0.0, min(1.0, opacity)))
     layer.triggerRepaint()
     return _ok("set_layer_opacity", layer=layer_name, opacity=opacity)
@@ -861,7 +1000,7 @@ def set_layer_visibility(layer_name: str, visible: bool,
     from qgis.core import QgsProject, QgsLayerTree
     layer = _get_layer(layer_name)
     if not layer:
-        return _err("set_layer_visibility", f"Couche introuvable : {layer_name}")
+        return _err("set_layer_visibility", f"Layer not found: {layer_name}")
     root = QgsProject.instance().layerTreeRoot()
     node = root.findLayer(layer.id())
     if node:
@@ -899,20 +1038,56 @@ def add_field(layer_name: str, field_name: str,
     }
     layer = _get_layer(layer_name)
     if not layer or not isinstance(layer, QgsVectorLayer):
-        return _err("add_field", f"Couche vecteur introuvable : {layer_name}")
+        return _err("add_field", f"Vector layer not found: {layer_name}")
     if layer.fields().indexFromName(field_name) != -1:
-        return _err("add_field", f"Le champ {field_name} existe déjà")
+        return _err("add_field", f"Field {field_name} already exists")
     qtype = TYPE_MAP.get(field_type.lower(), QVariant.String)
     field = QgsField(field_name, qtype, len=length)
     layer.startEditing()
     ok = layer.addAttribute(field)
     layer.commitChanges()
     if not ok:
-        return _err("add_field", f"Impossible d'ajouter le champ {field_name}")
+        return _err("add_field", f"Cannot add field {field_name}")
     return _ok("add_field",
                layer=layer_name,
                field=field_name,
                type=field_type)
+
+
+def delete_field(layer_name: str, field_name: str) -> dict:
+    """Permanently delete a field from a vector layer."""
+    from qgis.core import QgsVectorLayer
+    layer = _get_layer(layer_name)
+    if not layer or not isinstance(layer, QgsVectorLayer):
+        return _err("delete_field", f"Vector layer not found: {layer_name}")
+    idx = layer.fields().indexFromName(field_name)
+    if idx == -1:
+        return _err("delete_field", f"Field not found: {field_name}")
+    layer.startEditing()
+    ok = layer.deleteAttribute(idx)
+    layer.commitChanges()
+    if not ok:
+        return _err("delete_field", f"Cannot delete field: {field_name}")
+    return _ok("delete_field", layer=layer_name, field=field_name)
+
+
+def rename_field(layer_name: str, field_name: str, new_name: str) -> dict:
+    """Rename an existing field in a vector layer."""
+    from qgis.core import QgsVectorLayer
+    layer = _get_layer(layer_name)
+    if not layer or not isinstance(layer, QgsVectorLayer):
+        return _err("rename_field", f"Vector layer not found: {layer_name}")
+    idx = layer.fields().indexFromName(field_name)
+    if idx == -1:
+        return _err("rename_field", f"Field not found: {field_name}")
+    if layer.fields().indexFromName(new_name) != -1:
+        return _err("rename_field", f"Field already exists: {new_name}")
+    layer.startEditing()
+    ok = layer.renameAttribute(idx, new_name)
+    layer.commitChanges()
+    if not ok:
+        return _err("rename_field", f"Cannot rename field: {field_name}")
+    return _ok("rename_field", layer=layer_name, old_name=field_name, new_name=new_name)
 
 
 def calculate_field(layer_name: str, field_name: str,
@@ -926,15 +1101,15 @@ def calculate_field(layer_name: str, field_name: str,
                           QgsExpressionContextUtils, QgsFeatureRequest
     layer = _get_layer(layer_name)
     if not layer or not isinstance(layer, QgsVectorLayer):
-        return _err("calculate_field", f"Couche vecteur introuvable : {layer_name}")
+        return _err("calculate_field", f"Vector layer not found: {layer_name}")
     idx = layer.fields().indexFromName(field_name)
     if idx == -1:
         return _err("calculate_field",
-                    f"Champ introuvable : {field_name}. Créez-le d'abord avec add_field.")
+                    f"Field not found: {field_name}. Create it first with add_field.")
     expr = QgsExpression(expression)
     if expr.hasParserError():
         return _err("calculate_field",
-                    f"Expression invalide : {expr.parserErrorString()}")
+                    f"Invalid expression: {expr.parserErrorString()}")
     ctx = QgsExpressionContext()
     ctx.appendScopes(QgsExpressionContextUtils.globalProjectLayerScopes(layer))
     layer.startEditing()
@@ -964,7 +1139,7 @@ def load_layer(file_path: str, layer_name: str = "",
                            QgsRasterLayer, QgsWkbTypes)
     import os
     if not os.path.exists(file_path):
-        return _err("load_layer", f"Fichier introuvable : {file_path}")
+        return _err("load_layer", f"File not found: {file_path}")
     name = layer_name or os.path.splitext(os.path.basename(file_path))[0]
     ext = os.path.splitext(file_path)[1].lower()
     raster_exts = {".tif", ".tiff", ".geotiff", ".img",
@@ -977,7 +1152,7 @@ def load_layer(file_path: str, layer_name: str = "",
             layer = QgsVectorLayer(file_path, name, "ogr")
         if not layer.isValid():
             return _err("load_layer",
-                        f"Couche invalide : {file_path}")
+                        f"Invalid layer: {file_path}")
         QgsProject.instance().addMapLayer(layer)
         info = {"layer": name, "path": file_path,
                 "crs": layer.crs().authid(), "added_to_project": True}
@@ -987,6 +1162,25 @@ def load_layer(file_path: str, layer_name: str = "",
         return _ok("load_layer", **info)
     except Exception as e:
         return _err("load_layer", str(e))
+
+
+def rename_layer(layer_name: str, new_name: str) -> dict:
+    """Rename a layer in the QGIS project (display name only, source file untouched)."""
+    layer = _get_layer(layer_name)
+    if not layer:
+        return _err("rename_layer", f"Layer not found: {layer_name}")
+    layer.setName(new_name)
+    return _ok("rename_layer", old_name=layer_name, new_name=new_name)
+
+
+def remove_layer(layer_name: str) -> dict:
+    """Remove a layer from the QGIS project without deleting the source file."""
+    from qgis.core import QgsProject
+    layer = _get_layer(layer_name)
+    if not layer:
+        return _err("remove_layer", f"Layer not found: {layer_name}")
+    QgsProject.instance().removeMapLayer(layer.id())
+    return _ok("remove_layer", layer=layer_name)
 
 
 def export_layer(layer_name: str, output_path: str,
@@ -999,7 +1193,7 @@ def export_layer(layer_name: str, output_path: str,
     from qgis.core import QgsVectorLayer, QgsVectorFileWriter, QgsProject
     layer = _get_layer(layer_name)
     if not layer or not isinstance(layer, QgsVectorLayer):
-        return _err("export_layer", f"Couche vecteur introuvable : {layer_name}")
+        return _err("export_layer", f"Vector layer not found: {layer_name}")
     options = QgsVectorFileWriter.SaveVectorOptions()
     options.driverName = format
     options.onlySelectedFeatures = only_selected
@@ -1010,7 +1204,7 @@ def export_layer(layer_name: str, output_path: str,
         options
     )
     if error != QgsVectorFileWriter.NoError:
-        return _err("export_layer", msg or "Erreur inconnue à l'export")
+        return _err("export_layer", msg or "Unknown export error")
     return _ok("export_layer",
                layer=layer_name,
                output_path=output_path,
@@ -1028,7 +1222,7 @@ def calculate_geometry(layer_name: str,
     import processing
     layer = _get_layer(layer_name)
     if not layer:
-        return _err("calculate_geometry", f"Couche introuvable : {layer_name}")
+        return _err("calculate_geometry", f"Layer not found: {layer_name}")
     return _run_algo("calculate_geometry", "native:addgeometryattributes",
                      {"INPUT": layer, "CALC_METHOD": 0},
                      output_layer_name)
@@ -1040,7 +1234,7 @@ def check_geometry_validity(layer_name: str) -> dict:
     layer = _get_layer(layer_name)
     if not layer:
         return _err("check_geometry_validity",
-                    f"Couche introuvable : {layer_name}")
+                    f"Layer not found: {layer_name}")
     try:
         result = processing.run("native:checkvalidity", {
             "INPUT": layer,
@@ -1136,13 +1330,13 @@ def get_label_settings(layer_name: str) -> dict:
 
     layer = _get_layer(layer_name)
     if not layer or not isinstance(layer, QgsVectorLayer):
-        return _err("get_label_settings", f"Couche vecteur introuvable : {layer_name}")
+        return _err("get_label_settings", f"Vector layer not found: {layer_name}")
 
     if not layer.labeling():
         return _ok("get_label_settings",
                    layer=layer_name,
                    enabled=False,
-                   message="Aucun étiquetage configuré sur cette couche")
+                   message="No labeling configured on this layer")
 
     try:
         settings = layer.labeling().settings()
@@ -1183,12 +1377,12 @@ def enable_labels(layer_name: str, field_name: str,
 
     layer = _get_layer(layer_name)
     if not layer or not isinstance(layer, QgsVectorLayer):
-        return _err("enable_labels", f"Couche vecteur introuvable : {layer_name}")
+        return _err("enable_labels", f"Vector layer not found: {layer_name}")
 
     idx = layer.fields().indexFromName(field_name)
     if idx == -1:
         return _err("enable_labels",
-                    f"Champ introuvable : {field_name}. Utiliser get_layer_fields d'abord.")
+                    f"Field not found: {field_name}. Use get_layer_fields first.")
 
     try:
         settings = QgsPalLayerSettings()
@@ -1232,7 +1426,7 @@ def disable_labels(layer_name: str) -> dict:
 
     layer = _get_layer(layer_name)
     if not layer or not isinstance(layer, QgsVectorLayer):
-        return _err("disable_labels", f"Couche vecteur introuvable : {layer_name}")
+        return _err("disable_labels", f"Vector layer not found: {layer_name}")
 
     layer.setLabelsEnabled(False)
     layer.triggerRepaint()
@@ -1253,10 +1447,10 @@ def set_label_text_format(layer_name: str,
 
     layer = _get_layer(layer_name)
     if not layer or not isinstance(layer, QgsVectorLayer):
-        return _err("set_label_text_format", f"Couche vecteur introuvable : {layer_name}")
+        return _err("set_label_text_format", f"Vector layer not found: {layer_name}")
     if not layer.labeling():
         return _err("set_label_text_format",
-                    "Aucune étiquette configurée. Utiliser enable_labels d'abord.")
+                    "No labels configured. Use enable_labels first.")
 
     try:
         settings = _get_pal_settings(layer)
@@ -1303,10 +1497,10 @@ def set_label_buffer(layer_name: str,
 
     layer = _get_layer(layer_name)
     if not layer or not isinstance(layer, QgsVectorLayer):
-        return _err("set_label_buffer", f"Couche vecteur introuvable : {layer_name}")
+        return _err("set_label_buffer", f"Vector layer not found: {layer_name}")
     if not layer.labeling():
         return _err("set_label_buffer",
-                    "Aucune étiquette configurée. Utiliser enable_labels d'abord.")
+                    "No labels configured. Use enable_labels first.")
 
     try:
         settings = _get_pal_settings(layer)
@@ -1341,13 +1535,13 @@ def set_label_placement(layer_name: str,
 
     layer = _get_layer(layer_name)
     if not layer or not isinstance(layer, QgsVectorLayer):
-        return _err("set_label_placement", f"Couche vecteur introuvable : {layer_name}")
+        return _err("set_label_placement", f"Vector layer not found: {layer_name}")
     if not layer.labeling():
         return _err("set_label_placement",
-                    "Aucune étiquette configurée. Utiliser enable_labels d'abord.")
+                    "No labels configured. Use enable_labels first.")
 
     if placement not in _PLACEMENT_STR_TO_INT:
-        return _err("set_label_placement", f"Placement inconnu : {placement}")
+        return _err("set_label_placement", f"Unknown placement: {placement}")
 
     try:
         settings = _get_pal_settings(layer)
@@ -1381,15 +1575,15 @@ def set_label_expression(layer_name: str, expression: str) -> dict:
 
     layer = _get_layer(layer_name)
     if not layer or not isinstance(layer, QgsVectorLayer):
-        return _err("set_label_expression", f"Couche vecteur introuvable : {layer_name}")
+        return _err("set_label_expression", f"Vector layer not found: {layer_name}")
     if not layer.labeling():
         return _err("set_label_expression",
-                    "Aucune étiquette configurée. Utiliser enable_labels d'abord.")
+                    "No labels configured. Use enable_labels first.")
 
     expr = QgsExpression(expression)
     if expr.hasParserError():
         return _err("set_label_expression",
-                    f"Expression invalide : {expr.parserErrorString()}")
+                    f"Invalid expression: {expr.parserErrorString()}")
 
     try:
         settings = _get_pal_settings(layer)
@@ -1415,10 +1609,10 @@ def set_label_shadow(layer_name: str,
 
     layer = _get_layer(layer_name)
     if not layer or not isinstance(layer, QgsVectorLayer):
-        return _err("set_label_shadow", f"Couche vecteur introuvable : {layer_name}")
+        return _err("set_label_shadow", f"Vector layer not found: {layer_name}")
     if not layer.labeling():
         return _err("set_label_shadow",
-                    "Aucune étiquette configurée. Utiliser enable_labels d'abord.")
+                    "No labels configured. Use enable_labels first.")
 
     try:
         settings = _get_pal_settings(layer)
@@ -1470,15 +1664,15 @@ def set_label_background(layer_name: str,
 
     layer = _get_layer(layer_name)
     if not layer or not isinstance(layer, QgsVectorLayer):
-        return _err("set_label_background", f"Couche vecteur introuvable : {layer_name}")
+        return _err("set_label_background", f"Vector layer not found: {layer_name}")
     if not layer.labeling():
         return _err("set_label_background",
-                    "Aucune étiquette configurée. Utiliser enable_labels d'abord.")
+                    "No labels configured. Use enable_labels first.")
 
     shape_attr = _BACKGROUND_SHAPES.get(shape_type.lower())
     if shape_attr is None:
         return _err("set_label_background",
-                    f"Forme inconnue : {shape_type}. Valeurs valides : {list(_BACKGROUND_SHAPES)}")
+                    f"Unknown shape: {shape_type}. Valid values: {list(_BACKGROUND_SHAPES)}")
 
     try:
         settings = _get_pal_settings(layer)
@@ -1509,19 +1703,136 @@ def set_label_background(layer_name: str,
 
 
 # ══════════════════════════════════════════════════════════════
+# CATEGORY: RASTER
+# ══════════════════════════════════════════════════════════════
+
+def get_raster_info(layer_name: str) -> dict:
+    """Return metadata of a raster layer: bands, pixel size, extent, CRS, nodata."""
+    from qgis.core import QgsRasterLayer
+    layer = _get_layer(layer_name)
+    if not layer or not isinstance(layer, QgsRasterLayer):
+        return _err("get_raster_info", f"Raster layer not found: {layer_name}")
+    provider = layer.dataProvider()
+    ext = layer.extent()
+    nodata = None
+    try:
+        if provider.sourceHasNoDataValue(1):
+            nodata = provider.sourceNoDataValue(1)
+    except Exception:
+        pass
+    return _ok("get_raster_info",
+               layer=layer_name,
+               crs=layer.crs().authid(),
+               band_count=layer.bandCount(),
+               width_px=layer.width(),
+               height_px=layer.height(),
+               pixel_size_x=layer.rasterUnitsPerPixelX(),
+               pixel_size_y=layer.rasterUnitsPerPixelY(),
+               extent=[ext.xMinimum(), ext.yMinimum(),
+                       ext.xMaximum(), ext.yMaximum()],
+               nodata=nodata,
+               source=layer.source())
+
+
+def get_raster_statistics(layer_name: str, band: int = 1) -> dict:
+    """Compute min, max, mean, stddev for a raster band."""
+    from qgis.core import QgsRasterLayer
+    layer = _get_layer(layer_name)
+    if not layer or not isinstance(layer, QgsRasterLayer):
+        return _err("get_raster_statistics", f"Raster layer not found: {layer_name}")
+    if band < 1 or band > layer.bandCount():
+        return _err("get_raster_statistics",
+                    f"Invalid band {band}. Layer has {layer.bandCount()} band(s).")
+    try:
+        provider = layer.dataProvider()
+        stats = provider.bandStatistics(band)
+        return _ok("get_raster_statistics",
+                   layer=layer_name,
+                   band=band,
+                   min=stats.minimumValue,
+                   max=stats.maximumValue,
+                   mean=stats.mean,
+                   stddev=stats.stdDev)
+    except Exception:
+        return _err("get_raster_statistics", traceback.format_exc())
+
+
+def set_raster_style(layer_name: str,
+                     style_type: str = "pseudocolor",
+                     band: int = 1,
+                     color_ramp_name: str = "Spectral",
+                     min_value: float = None,
+                     max_value: float = None,
+                     invert: bool = False) -> dict:
+    """Apply a pseudocolor or grayscale renderer to a raster layer."""
+    from qgis.core import (QgsRasterLayer, QgsSingleBandGrayRenderer,
+                           QgsSingleBandPseudoColorRenderer,
+                           QgsColorRampShader, QgsRasterShader, QgsStyle)
+    layer = _get_layer(layer_name)
+    if not layer or not isinstance(layer, QgsRasterLayer):
+        return _err("set_raster_style", f"Raster layer not found: {layer_name}")
+    if band < 1 or band > layer.bandCount():
+        return _err("set_raster_style",
+                    f"Invalid band {band}. Layer has {layer.bandCount()} band(s).")
+    try:
+        provider = layer.dataProvider()
+
+        if style_type == "gray":
+            renderer = QgsSingleBandGrayRenderer(provider, band)
+            layer.setRenderer(renderer)
+            layer.triggerRepaint()
+            return _ok("set_raster_style", layer=layer_name,
+                       style_type="gray", band=band)
+
+        # pseudocolor — resolve min/max automatically if not provided
+        if min_value is None or max_value is None:
+            stats = provider.bandStatistics(band)
+            if min_value is None:
+                min_value = stats.minimumValue
+            if max_value is None:
+                max_value = stats.maximumValue
+
+        style = QgsStyle.defaultStyle()
+        ramp = style.colorRamp(color_ramp_name) or style.colorRamp("Spectral")
+        if invert:
+            ramp.invert()
+
+        shader_fn = QgsColorRampShader(min_value, max_value, ramp)
+        shader_fn.setColorRampType(QgsColorRampShader.Interpolated)
+        shader_fn.classifyColorRamp(10)
+
+        raster_shader = QgsRasterShader()
+        raster_shader.setRasterShaderFunction(shader_fn)
+
+        renderer = QgsSingleBandPseudoColorRenderer(provider, band, raster_shader)
+        layer.setRenderer(renderer)
+        layer.triggerRepaint()
+        return _ok("set_raster_style",
+                   layer=layer_name,
+                   style_type="pseudocolor",
+                   band=band,
+                   color_ramp=color_ramp_name,
+                   min=min_value,
+                   max=max_value,
+                   inverted=invert)
+    except Exception:
+        return _err("set_raster_style", traceback.format_exc())
+
+
+# ══════════════════════════════════════════════════════════════
 # CAPTURE DU CANVAS QGIS
 # ══════════════════════════════════════════════════════════════
 
 def capture_map_canvas(iface=None) -> dict:
     if not iface:
-        return _err("capture_map_canvas", "iface non disponible")
+        return _err("capture_map_canvas", "iface not available")
     try:
         import base64
         from qgis.PyQt.QtCore import QBuffer, QByteArray, QIODevice, Qt
 
         canvas = iface.mapCanvas()
         if not canvas:
-            return _err("capture_map_canvas", "Canvas QGIS introuvable")
+            return _err("capture_map_canvas", "QGIS canvas not found")
 
         pixmap = canvas.grab()
 
@@ -1563,9 +1874,9 @@ def run_pyqgis_code(code: str, executor=None) -> dict:
     """
     if executor is None:
         return _err("run_pyqgis_code",
-                    "executor non disponible (mode local uniquement)")
+                    "executor not available (local mode only)")
     success, error = executor.execute_code(code)
     if success:
         return _ok("run_pyqgis_code", code_executed=True,
                    warning=error)
-    return _err("run_pyqgis_code", error or "Erreur d'exécution")
+    return _err("run_pyqgis_code", error or "Execution error")

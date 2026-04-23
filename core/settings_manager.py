@@ -121,11 +121,11 @@ class SettingsManager:
     def set_include_project_context(self, enabled: bool):
         self.set("include_project_context", bool(enabled))
 
-    def get_project_context_max_kb(self) -> int:
-        return self.get_int("project_context_max_kb", 64)
+    def get_project_context_max_tokens(self) -> int:
+        return self.get_int("project_context_max_tokens", 32768)
 
-    def set_project_context_max_kb(self, n_kb: int):
-        self.set("project_context_max_kb", int(n_kb))
+    def set_project_context_max_tokens(self, n: int):
+        self.set("project_context_max_tokens", int(n))
 
     # Request trace export: write each API request/response pair to a JSON file for debugging
     def get_export_traces(self) -> bool:
@@ -181,6 +181,12 @@ class SettingsManager:
 
     def set_agent_show_steps(self, enabled: bool):
         self.set("agent_show_steps", bool(enabled))
+
+    def get_agent_max_tokens(self) -> int:
+        return self.get_int("agent_max_tokens", 8192)
+
+    def set_agent_max_tokens(self, n: int):
+        self.set("agent_max_tokens", int(n))
 
     # --- Custom processes ---
     def get_processes_folder(self) -> str:

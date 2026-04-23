@@ -517,6 +517,194 @@ REGISTRY = {
         },
     },
 
+    "extract_by_expression": {
+        "intents": ["process", "select"],
+        "handler": "extract_by_expression",
+        "schema": {
+            "type": "function",
+            "function": {
+                "name": "extract_by_expression",
+                "description": (
+                    "Creates a new layer containing only features that match a QGIS expression "
+                    "(native:extractbyexpression). "
+                    "Use instead of select_by_expression when you need a permanent filtered layer. "
+                    "Expression examples: '\"type\" = \\'road\\'' or '\"area\" > 1000'."
+                ),
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "layer_name": {"type": "string"},
+                        "expression": {
+                            "type": "string",
+                            "description": "QGIS expression to filter features. Ex: '\"status\" = \\'active\\''.",
+                        },
+                        "output_layer_name": {"type": "string"},
+                    },
+                    "required": ["layer_name", "expression", "output_layer_name"],
+                },
+            },
+        },
+    },
+
+    "extract_by_location": {
+        "intents": ["process", "select"],
+        "handler": "extract_by_location",
+        "schema": {
+            "type": "function",
+            "function": {
+                "name": "extract_by_location",
+                "description": (
+                    "Creates a new layer with features that have a given spatial relationship "
+                    "with another layer (native:extractbylocation). "
+                    "Use when you need a permanent layer, not just a selection. "
+                    "predicate: 0=intersects (default), 1=contains, 6=within, 4=touches."
+                ),
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "layer_name": {
+                            "type": "string",
+                            "description": "Layer from which features are extracted.",
+                        },
+                        "intersect_layer_name": {
+                            "type": "string",
+                            "description": "Reference spatial layer.",
+                        },
+                        "predicate": {
+                            "type": "integer",
+                            "description": "0=intersects, 1=contains, 6=within, 4=touches. Default 0.",
+                            "default": 0,
+                        },
+                        "output_layer_name": {"type": "string"},
+                    },
+                    "required": ["layer_name", "intersect_layer_name", "output_layer_name"],
+                },
+            },
+        },
+    },
+
+    "merge_layers": {
+        "intents": ["process", "edit"],
+        "handler": "merge_layers",
+        "schema": {
+            "type": "function",
+            "function": {
+                "name": "merge_layers",
+                "description": (
+                    "Merges multiple vector layers of the same geometry type into a single layer "
+                    "(native:mergevectorlayers). "
+                    "Use for 'merge', 'combine', 'append all layers into one'. "
+                    "All layers must have compatible geometry types (e.g. all polygons)."
+                ),
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "layer_names": {
+                            "type": "array",
+                            "items": {"type": "string"},
+                            "description": "List of layer names to merge. Minimum 2.",
+                        },
+                        "output_layer_name": {"type": "string"},
+                    },
+                    "required": ["layer_names", "output_layer_name"],
+                },
+            },
+        },
+    },
+
+    "join_by_field": {
+        "intents": ["process", "analyse"],
+        "handler": "join_by_field",
+        "schema": {
+            "type": "function",
+            "function": {
+                "name": "join_by_field",
+                "description": (
+                    "Attribute join: adds fields from a second layer to a first layer based on "
+                    "a common field value (native:joinattributestable). "
+                    "Different from join_by_location: matching is done by field value, not geometry. "
+                    "Ex: add population data to municipalities by joining on 'commune_code'."
+                ),
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "layer_name": {
+                            "type": "string",
+                            "description": "Layer that receives the joined fields.",
+                        },
+                        "join_layer_name": {
+                            "type": "string",
+                            "description": "Layer from which fields are taken.",
+                        },
+                        "layer_field": {
+                            "type": "string",
+                            "description": "Join key field in the main layer.",
+                        },
+                        "join_field": {
+                            "type": "string",
+                            "description": "Matching field in the join layer.",
+                        },
+                        "join_fields": {
+                            "type": "array",
+                            "items": {"type": "string"},
+                            "description": "Specific fields to copy from the join layer. [] = all fields.",
+                            "default": [],
+                        },
+                        "discard_nonmatching": {
+                            "type": "boolean",
+                            "description": "True = keep only features with a match. Default false.",
+                            "default": False,
+                        },
+                        "prefix": {
+                            "type": "string",
+                            "description": "Prefix added to joined field names to avoid conflicts. Ex: 'pop_'.",
+                            "default": "",
+                        },
+                        "output_layer_name": {"type": "string"},
+                    },
+                    "required": ["layer_name", "join_layer_name", "layer_field", "join_field", "output_layer_name"],
+                },
+            },
+        },
+    },
+
+    "count_points_in_polygon": {
+        "intents": ["process", "analyse"],
+        "handler": "count_points_in_polygon",
+        "schema": {
+            "type": "function",
+            "function": {
+                "name": "count_points_in_polygon",
+                "description": (
+                    "Counts the number of points inside each polygon and adds the count as a new field "
+                    "(native:countpointsinpolygon). "
+                    "Use for 'how many points per polygon', 'count incidents per zone', "
+                    "'number of trees per parcel'."
+                ),
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "polygon_layer_name": {
+                            "type": "string",
+                            "description": "Polygon layer that receives the count field.",
+                        },
+                        "point_layer_name": {
+                            "type": "string",
+                            "description": "Point layer to count.",
+                        },
+                        "count_field_name": {
+                            "type": "string",
+                            "description": "Name of the new count field. Default 'NUMPOINTS'.",
+                            "default": "NUMPOINTS",
+                        },
+                        "output_layer_name": {"type": "string"},
+                    },
+                    "required": ["polygon_layer_name", "point_layer_name", "output_layer_name"],
+                },
+            },
+        },
+    },
+
     "run_processing_algorithm": {
         "intents": ["process"],
         "handler": "run_processing_algorithm",
@@ -640,6 +828,51 @@ REGISTRY = {
                         },
                     },
                     "required": ["layer_name", "expression"],
+                },
+            },
+        },
+    },
+
+    "clear_selection": {
+        "intents": ["select"],
+        "handler": "clear_selection",
+        "schema": {
+            "type": "function",
+            "function": {
+                "name": "clear_selection",
+                "description": (
+                    "Removes all selected features on a layer. "
+                    "Use after a selection operation to reset the selection state."
+                ),
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "layer_name": {"type": "string"},
+                    },
+                    "required": ["layer_name"],
+                },
+            },
+        },
+    },
+
+    "invert_selection": {
+        "intents": ["select"],
+        "handler": "invert_selection",
+        "schema": {
+            "type": "function",
+            "function": {
+                "name": "invert_selection",
+                "description": (
+                    "Inverts the current selection on a layer: selected features become "
+                    "unselected and unselected features become selected. "
+                    "Useful after select_by_expression to get the complement."
+                ),
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "layer_name": {"type": "string"},
+                    },
+                    "required": ["layer_name"],
                 },
             },
         },
@@ -1474,6 +1707,115 @@ REGISTRY = {
         },
     },
 
+    "delete_field": {
+        "intents": ["edit"],
+        "handler": "delete_field",
+        "schema": {
+            "type": "function",
+            "function": {
+                "name": "delete_field",
+                "description": (
+                    "Permanently deletes a field from a vector layer. "
+                    "Use get_layer_fields first to confirm the exact field name. "
+                    "This operation cannot be undone."
+                ),
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "layer_name": {"type": "string"},
+                        "field_name": {
+                            "type": "string",
+                            "description": "Exact name of the field to delete.",
+                        },
+                    },
+                    "required": ["layer_name", "field_name"],
+                },
+            },
+        },
+    },
+
+    "rename_field": {
+        "intents": ["edit"],
+        "handler": "rename_field",
+        "schema": {
+            "type": "function",
+            "function": {
+                "name": "rename_field",
+                "description": (
+                    "Renames an existing field in a vector layer. "
+                    "Use get_layer_fields first to confirm the exact current name."
+                ),
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "layer_name": {"type": "string"},
+                        "field_name": {
+                            "type": "string",
+                            "description": "Current exact name of the field.",
+                        },
+                        "new_name": {
+                            "type": "string",
+                            "description": "New name for the field.",
+                        },
+                    },
+                    "required": ["layer_name", "field_name", "new_name"],
+                },
+            },
+        },
+    },
+
+    "rename_layer": {
+        "intents": ["edit"],
+        "handler": "rename_layer",
+        "schema": {
+            "type": "function",
+            "function": {
+                "name": "rename_layer",
+                "description": (
+                    "Renames a layer in the QGIS project panel. "
+                    "Only changes the display name — does not rename the source file."
+                ),
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "layer_name": {
+                            "type": "string",
+                            "description": "Current layer name.",
+                        },
+                        "new_name": {
+                            "type": "string",
+                            "description": "New display name for the layer.",
+                        },
+                    },
+                    "required": ["layer_name", "new_name"],
+                },
+            },
+        },
+    },
+
+    "remove_layer": {
+        "intents": ["edit"],
+        "handler": "remove_layer",
+        "schema": {
+            "type": "function",
+            "function": {
+                "name": "remove_layer",
+                "description": (
+                    "Removes a layer from the QGIS project. "
+                    "Does NOT delete the source file on disk. "
+                    "This operation cannot be undone without reloading the layer."
+                ),
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "layer_name": {"type": "string"},
+                    },
+                    "required": ["layer_name"],
+                },
+            },
+        },
+    },
+
     "calculate_field": {
         "intents": ["edit", "analyse"],
         "handler": "calculate_field",
@@ -1574,6 +1916,116 @@ REGISTRY = {
                         },
                     },
                     "required": ["layer_name", "output_path"],
+                },
+            },
+        },
+    },
+
+    # ══════════════════════════════════════════════════════════
+    # RASTER
+    # ══════════════════════════════════════════════════════════
+
+    "get_raster_info": {
+        "intents": ["raster", "read"],
+        "handler": "get_raster_info",
+        "schema": {
+            "type": "function",
+            "function": {
+                "name": "get_raster_info",
+                "description": (
+                    "Returns metadata of a raster layer: band count, pixel size, "
+                    "width/height in pixels, CRS, spatial extent, source path, and nodata value. "
+                    "Use first to inspect any raster layer before processing or styling it."
+                ),
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "layer_name": {"type": "string"},
+                    },
+                    "required": ["layer_name"],
+                },
+            },
+        },
+    },
+
+    "get_raster_statistics": {
+        "intents": ["raster", "read", "analyse"],
+        "handler": "get_raster_statistics",
+        "schema": {
+            "type": "function",
+            "function": {
+                "name": "get_raster_statistics",
+                "description": (
+                    "Computes statistics for a raster band: min, max, mean, standard deviation. "
+                    "Use to determine value range before styling with set_raster_style. "
+                    "band defaults to 1 (first band)."
+                ),
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "layer_name": {"type": "string"},
+                        "band": {
+                            "type": "integer",
+                            "description": "Band number (1-based). Default 1.",
+                            "default": 1,
+                        },
+                    },
+                    "required": ["layer_name"],
+                },
+            },
+        },
+    },
+
+    "set_raster_style": {
+        "intents": ["raster", "style"],
+        "handler": "set_raster_style",
+        "schema": {
+            "type": "function",
+            "function": {
+                "name": "set_raster_style",
+                "description": (
+                    "Applies a visual style to a raster layer. "
+                    "style_type: 'pseudocolor' (color ramp on values, default) or 'gray' (grayscale). "
+                    "Use get_raster_statistics first to know min/max and set them explicitly — "
+                    "otherwise they are computed automatically. "
+                    "color_ramp_name examples: 'Spectral', 'RdYlGn', 'Viridis', 'Blues', 'Reds', 'Greys'. "
+                    "Set invert=true to reverse the ramp direction (e.g. high values in blue)."
+                ),
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "layer_name": {"type": "string"},
+                        "style_type": {
+                            "type": "string",
+                            "enum": ["pseudocolor", "gray"],
+                            "description": "Renderer type. Default 'pseudocolor'.",
+                            "default": "pseudocolor",
+                        },
+                        "band": {
+                            "type": "integer",
+                            "description": "Band to render (1-based). Default 1.",
+                            "default": 1,
+                        },
+                        "color_ramp_name": {
+                            "type": "string",
+                            "description": "QGIS color ramp name for pseudocolor. Default 'Spectral'.",
+                            "default": "Spectral",
+                        },
+                        "min_value": {
+                            "type": "number",
+                            "description": "Minimum value of the color ramp. Auto-computed if omitted.",
+                        },
+                        "max_value": {
+                            "type": "number",
+                            "description": "Maximum value of the color ramp. Auto-computed if omitted.",
+                        },
+                        "invert": {
+                            "type": "boolean",
+                            "description": "Invert the color ramp direction. Default false.",
+                            "default": False,
+                        },
+                    },
+                    "required": ["layer_name"],
                 },
             },
         },

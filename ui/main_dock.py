@@ -788,12 +788,12 @@ class MainDock(QDockWidget):
 
         # 2) Build the project snapshot for LLM context
         try:
-            kb = int(self.settings_manager.get_project_context_max_kb() or 64)
+            ctx_tokens = int(self.settings_manager.get_project_context_max_tokens() or 32768)
         except Exception:
-            kb = 64
+            ctx_tokens = 32768
         try:
             snapshot = build_project_snapshot()
-            snapshot_json = snapshot_to_json(snapshot, max_bytes=kb * 1024)
+            snapshot_json = snapshot_to_json(snapshot, max_bytes=ctx_tokens * 4)
         except Exception:
             snapshot_json = "{}"
 
@@ -1762,7 +1762,8 @@ class MainDock(QDockWidget):
                 self.tabs.setCurrentIndex(0)
 
     def update_status_label(self):
-        mode = self.settings_manager.get("mode", "local").capitalize()
+        _mode_key = "mode_remote" if self.settings_manager.get("mode", "local") == "distant" else "mode_local"
+        mode = self.t.get(_mode_key, self.settings_manager.get("mode", "local").capitalize())
         model = self.settings_manager.get("model", None) or self.settings_manager.get("model_name", "N/A")
         self.status_label.setText(
             f"<b>{self.t['mode']} :</b> {mode} | "
@@ -1807,8 +1808,8 @@ class MainDock(QDockWidget):
             try:
                 prj = getattr(self, "_project_snapshot", None)
                 if prj is not None:
-                    max_kb = max(8, int(self.settings_manager.get_project_context_max_kb()))
-                    js = snapshot_to_json(prj, max_bytes=max_kb * 1024)
+                    ctx_tokens = max(512, int(self.settings_manager.get_project_context_max_tokens()))
+                    js = snapshot_to_json(prj, max_bytes=ctx_tokens * 4)
                     lang = self.settings_manager.get_language()
                     tr = get_translations(lang)
                     history.insert(0, {

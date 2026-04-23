@@ -174,7 +174,7 @@ class AgentLoop:
                     messages.append({
                         "role": "user",
                         "content": [
-                            {"type": "text", "text": "Here is a screenshot of the QGIS canvas after the operation :"},
+                            {"type": "text", "text": "Here is the screenshot of the QGIS canvas after the operation:"},
                             {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{b64}"}},
                         ],
                     })
@@ -285,11 +285,16 @@ class AgentLoop:
             if key:
                 headers["Authorization"] = f"Bearer {key}"
 
+        is_o_series = bool(re.match(r"^(o\d|gpt-5)", model))
+        token_key = "max_completion_tokens" if is_o_series else "max_tokens"
+        max_tokens = self.settings.get_agent_max_tokens()
+
         payload = {
             "model": model,
             "messages": messages,
             "tools": tools,
             "tool_choice": "auto",
+            token_key: max_tokens,
         }
 
         try:

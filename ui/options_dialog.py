@@ -27,9 +27,12 @@ class OptionsDialog(QDialog):
         self.mode_layout = QHBoxLayout()
         self.mode_label = QLabel()
         self.mode_combo = QComboBox()
-        self.mode_combo.addItems(["local", "distant"])
-        self.mode_combo.setCurrentText(self.settings.get_mode())
-        self.mode_combo.currentTextChanged.connect(self.update_visibility)
+        self.mode_combo.addItem("", "local")
+        self.mode_combo.addItem("", "distant")
+        saved_mode = self.settings.get_mode()
+        idx = self.mode_combo.findData(saved_mode)
+        self.mode_combo.setCurrentIndex(idx if idx >= 0 else 0)
+        self.mode_combo.currentIndexChanged.connect(self.update_visibility)
         self.mode_layout.addWidget(self.mode_label)
         self.mode_layout.addWidget(self.mode_combo)
         self.layout.addLayout(self.mode_layout)
@@ -71,12 +74,24 @@ class OptionsDialog(QDialog):
         self.ctx_check.setChecked(self.settings.get_include_project_context())
         self.ctx_max_label = QLabel()
         self.ctx_max_spin = QSpinBox()
-        self.ctx_max_spin.setRange(8, 1024)  # 8 KB to 1 MB
-        self.ctx_max_spin.setValue(self.settings.get_project_context_max_kb())
+        self.ctx_max_spin.setRange(512, 524288)
+        self.ctx_max_spin.setSingleStep(1024)
+        self.ctx_max_spin.setValue(self.settings.get_project_context_max_tokens())
         self.ctx_layout.addWidget(self.ctx_check)
         self.ctx_layout.addWidget(self.ctx_max_label)
         self.ctx_layout.addWidget(self.ctx_max_spin)
         self.layout.addLayout(self.ctx_layout)
+
+        # --- Max output tokens (response) — grouped with context tokens ---
+        self.agent_tokens_layout = QHBoxLayout()
+        self.agent_tokens_label = QLabel()
+        self.agent_tokens_spin = QSpinBox()
+        self.agent_tokens_spin.setRange(512, 65536)
+        self.agent_tokens_spin.setSingleStep(512)
+        self.agent_tokens_spin.setValue(self.settings.get_agent_max_tokens())
+        self.agent_tokens_layout.addWidget(self.agent_tokens_label)
+        self.agent_tokens_layout.addWidget(self.agent_tokens_spin)
+        self.layout.addLayout(self.agent_tokens_layout)
 
 
         # --- API endpoint URL ---
@@ -189,6 +204,7 @@ class OptionsDialog(QDialog):
 
         # Connect here, not in update_visibility, to avoid creating duplicate connections on each call
         self.trace_checkbox.toggled.connect(self.update_visibility)
+        self.chk_agent_mode.toggled.connect(self.update_visibility)
 
         # Populate all labels and apply initial visibility rules
         self.refresh_texts()
@@ -239,6 +255,8 @@ class OptionsDialog(QDialog):
 
         self.setWindowTitle(self.t["dock_title"])
         self.mode_label.setText(self.t["mode"])
+        self.mode_combo.setItemText(0, self.t.get("mode_local", "Local"))
+        self.mode_combo.setItemText(1, self.t.get("mode_remote", "Distant"))
         self.lang_label.setText(self.t["language"])
         self.history_label.setText(self.t["history_count"])
         self.url_label.setText(self.t["url"])
@@ -253,7 +271,7 @@ class OptionsDialog(QDialog):
             self.t.get("include_project_context", "Inclure le contexte projet")
         )
         self.ctx_max_label.setText(
-            self.t.get("project_context_max_kb", "Taille max (Ko) :")
+            self.t.get("project_context_max_tokens", "Tokens contexte (entrée) :")
         )
         self.trace_checkbox.setText(self.t.get("export_traces", "Exporter les requêtes (debug)"))
         self.trace_path_label.setText(self.t.get("trace_dir", "Dossier d'export :"))
@@ -271,6 +289,8 @@ class OptionsDialog(QDialog):
         self.chk_agent_show_steps.setToolTip(self.t.get("agent_show_steps_hint", ""))
         self.chk_canvas_capture.setText(self.t.get("canvas_capture_enabled", "Capture du canvas (vérification visuelle)"))
         self.chk_canvas_capture.setToolTip(self.t.get("canvas_capture_enabled_hint", ""))
+        self.agent_tokens_label.setText(self.t.get("agent_max_tokens", "Tokens max (réponse) :"))
+        self.agent_tokens_spin.setToolTip(self.t.get("agent_max_tokens_hint", ""))
 
         self.chk_windows_ca.setText(self.t.get("use_windows_ca_bundle", "Utiliser les certificats Windows (CA bundle)"))
         self.chk_windows_ca.setToolTip(self.t.get("use_windows_ca_bundle_hint", ""))
@@ -283,7 +303,7 @@ class OptionsDialog(QDialog):
         self.refresh_texts()
 
     def update_visibility(self):
-        is_distant = self.mode_combo.currentText() == "distant"
+        is_distant = self.mode_combo.currentData() == "distant"
         # API key is only needed for remote mode
         self.key_label.setVisible(is_distant)
         self.api_key_input.setVisible(is_distant)
@@ -297,6 +317,14 @@ class OptionsDialog(QDialog):
         self.ca_encoding_label.setVisible(ca_on)
         self.ca_encoding_input.setVisible(ca_on)
 
+        # Agent mode requires project context — force the checkbox on and lock it
+        agent_on = self.chk_agent_mode.isChecked()
+        if agent_on:
+            self.ctx_check.setChecked(True)
+            self.ctx_check.setEnabled(False)
+        else:
+            self.ctx_check.setEnabled(True)
+
     # -------------------------
     # Actions
     # -------------------------
@@ -305,7 +333,7 @@ class OptionsDialog(QDialog):
         model = (self.model_input.text().strip() or "gpt-4")
         headers = {}
 
-        if self.mode_combo.currentText() == "distant":
+        if self.mode_combo.currentData() == "distant":
             key = self.api_key_input.text().strip()
             if key:
                 headers["Authorization"] = f"Bearer {key}"
@@ -338,7 +366,7 @@ class OptionsDialog(QDialog):
     def save_settings(self):
         lang = "fr" if self.lang_combo.currentText() == "French" else "en"
         self.settings.set_language(lang)
-        self.settings.set_mode(self.mode_combo.currentText())
+        self.settings.set_mode(self.mode_combo.currentData())
         # Use the same key that MainDock and ConversationManager read
         self.settings.set("history_turns", int(self.history_spin.value()))
         self.settings.set_api_url(self.url_input.text().strip())
@@ -346,7 +374,7 @@ class OptionsDialog(QDialog):
         self.settings.set_api_key(self.api_key_input.text().strip())
         self.settings.set_verify_before_execute(self.verify_checkbox.isChecked())
         self.settings.set_include_project_context(self.ctx_check.isChecked())
-        self.settings.set_project_context_max_kb(int(self.ctx_max_spin.value()))
+        self.settings.set_project_context_max_tokens(int(self.ctx_max_spin.value()))
         export_on = self.trace_checkbox.isChecked()
         self.settings.set_export_traces(export_on)
 
@@ -370,6 +398,7 @@ class OptionsDialog(QDialog):
         self.settings.set_agent_max_iterations(int(self.agent_iter_spin.value()))
         self.settings.set_agent_show_steps(self.chk_agent_show_steps.isChecked())
         self.settings.set_canvas_capture_enabled(self.chk_canvas_capture.isChecked())
+        self.settings.set_agent_max_tokens(int(self.agent_tokens_spin.value()))
 
         # Windows CA bundle
         ca_enabled = self.chk_windows_ca.isChecked()
@@ -404,7 +433,7 @@ class OptionsDialog(QDialog):
 
         # 3) Reset the Options UI to visible defaults
         self.lang_combo.setCurrentText("French")
-        self.mode_combo.setCurrentText("local")
+        self.mode_combo.setCurrentIndex(self.mode_combo.findData("local"))
         self.history_spin.setValue(0)
         self.url_input.setText(self.settings.get_api_url())  # retombe sur défaut
         self.model_input.setText(self.settings.get_model())
