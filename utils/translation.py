@@ -116,7 +116,7 @@ def get_translations(lang):
             "agent_label_final": "Réponse",
 
             # Jauge contexte
-            "context_usage_label": "Contexte",
+            "context_usage_label": "Prompt",
             "agent_context_warning": "⚠ Fenêtre de contexte presque pleine ({used} / {max} tokens)",
             "agent_context_overflow": "⛔ Fenêtre de contexte saturée ({used} / {max} tokens) — la réponse risque d'être tronquée",
 
@@ -363,7 +363,7 @@ def get_translations(lang):
             "agent_label_final": "Answer",
 
             # Context gauge
-            "context_usage_label": "Context",
+            "context_usage_label": "Prompt",
             "agent_context_warning": "⚠ Context window filling up ({used} / {max} tokens)",
             "agent_context_overflow": "⛔ Context window nearly full ({used} / {max} tokens) — response may be truncated",
 

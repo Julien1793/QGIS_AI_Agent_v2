@@ -1790,7 +1790,7 @@ class MainDock(QDockWidget):
             ctx_label = self.t.get("context_usage_label", "Context")
             ctx_part = (
                 f" | <b>{ctx_label} :</b> "
-                f"<span style='color:{color}'>{bar} {prompt_tok:,}&nbsp;/&nbsp;{ctx_max:,}</span>"
+                f"<span style='color:{color}'>{bar} {prompt_tok:,}&nbsp;/&nbsp;{ctx_max:,} tokens</span>"
             )
 
         self.status_label.setText(
