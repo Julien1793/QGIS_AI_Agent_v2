@@ -101,6 +101,26 @@ class AgentLoop:
 
         # 6 — Agentic loop: LLM call → tool execution → tool result → next LLM call.
         total_tokens = 0
+        ctx_max = self.settings.get_project_context_max_tokens()
+        # first_prompt_tokens: input size of the first call = system + history + snapshot + tools + user message.
+        # last_completion_tokens: output size of the most recent call = what gets added to history next turn.
+        # Together they estimate the input size of the next fresh request.
+        first_prompt_tokens = 0
+        last_completion_tokens = 0
+
+        def _emit_gauge():
+            estimated = first_prompt_tokens + last_completion_tokens
+            self._emit(on_step, "context_usage", "",
+                       data={"prompt_tokens": estimated, "context_max": ctx_max})
+            if ctx_max > 0 and estimated > 0:
+                ratio = estimated / ctx_max
+                if ratio >= 0.90:
+                    self._emit(on_step, "context_warning",
+                               t["agent_context_overflow"].format(used=estimated, max=ctx_max))
+                elif ratio >= 0.75:
+                    self._emit(on_step, "context_warning",
+                               t["agent_context_warning"].format(used=estimated, max=ctx_max))
+
         for iteration in range(max_iter):
 
             # Skip the iteration event on the first turn to avoid cluttering the UI.
@@ -111,29 +131,21 @@ class AgentLoop:
 
             response, usage, prompt_tokens = self._llm_call(messages, tools)
             total_tokens += usage
-
-            # Emit context gauge update and warn if approaching the input token limit.
-            ctx_max = self.settings.get_project_context_max_tokens()
-            self._emit(on_step, "context_usage", "",
-                       data={"prompt_tokens": prompt_tokens, "context_max": ctx_max})
-            if ctx_max > 0 and prompt_tokens > 0:
-                ratio = prompt_tokens / ctx_max
-                if ratio >= 0.90:
-                    self._emit(on_step, "context_warning",
-                               t["agent_context_overflow"].format(used=prompt_tokens, max=ctx_max))
-                elif ratio >= 0.75:
-                    self._emit(on_step, "context_warning",
-                               t["agent_context_warning"].format(used=prompt_tokens, max=ctx_max))
+            last_completion_tokens = max(usage - prompt_tokens, 0)
+            if iteration == 0:
+                first_prompt_tokens = prompt_tokens
 
             # LLM call failed — emit an error event and abort the loop.
             if response is None:
                 err_text = t["llm_request_error"]
+                _emit_gauge()
                 self._emit(on_step, "final", err_text)
                 return err_text, total_tokens
 
             # The LLM returned a final text response with no further tool calls.
             if not response.get("tool_calls"):
                 final_text = response.get("content") or ""
+                _emit_gauge()
                 self._emit(on_step, "final", final_text)
                 return final_text, total_tokens
 
@@ -198,6 +210,7 @@ class AgentLoop:
 
         # The agent hit the iteration cap without reaching a final answer.
         max_text = t["agent_step_max_iterations"].format(max=max_iter)
+        _emit_gauge()
         self._emit(on_step, "max_iterations", max_text)
         return max_text, total_tokens
 
