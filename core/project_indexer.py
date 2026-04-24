@@ -23,52 +23,29 @@ def _layer_basics(layer):
     except Exception:
         pass
 
-    src = ""
-    try:
-        src = layer.source()
-    except Exception:
-        pass
-
     return {
-        "id": layer.id(),
         "name": layer.name(),
         "type": layer.type(),  # 0=Vector, 1=Raster, 2=Plugin
-        "provider": getattr(layer, "providerType", lambda: "")(),
         "crs": crs,
         "extent": ext,
-        "source": src,
     }
 
 def _vector_meta(vl: QgsVectorLayer):
     md = _layer_basics(vl)
-    # Geometry type -- wrapped in try/except because WKB access can fail on some layer types.
     try:
         wkb = vl.wkbType()
-        md["geometryType"] = int(QgsWkbTypes.geometryType(wkb))  # 0=Point,1=Line,2=Polygon,4=Unknown
-        md["geometryTypeName"] = QgsWkbTypes.displayString(wkb)  # ex: 'Point', 'MultiPolygonZ', etc.
-        md["isMultipart"] = QgsWkbTypes.isMultiType(wkb)
-        md["hasZ"] = QgsWkbTypes.hasZ(wkb)
-        md["hasM"] = QgsWkbTypes.hasM(wkb)
+        md["geometryType"] = QgsWkbTypes.displayString(wkb)  # e.g. 'Point', 'MultiPolygon'
     except Exception:
-        md["geometryType"] = None
-        md["geometryTypeName"] = "Unknown"
-        md["isMultipart"] = None
-        md["hasZ"] = None
-        md["hasM"] = None
-
-    # featureCount can be slow on very large datasets but is acceptable for snapshot purposes.
+        md["geometryType"] = "Unknown"
     try:
         md["featureCount"] = _safe_int(vl.featureCount(), 0)
     except Exception:
         md["featureCount"] = None
-
     return md
 
 def _raster_meta(rl: QgsRasterLayer):
     md = _layer_basics(rl)
     try:
-        md["width"] = rl.width()
-        md["height"] = rl.height()
         md["bandCount"] = rl.bandCount()
     except Exception:
         pass
@@ -84,13 +61,10 @@ def build_project_snapshot():
     snapshot = {
         "project": {
             "title": prj.title(),
-            "filePath": prj.fileName(),
-            "ellipsoid": prj.ellipsoid(),
             "crs": prj.crs().authid() if prj.crs().isValid() else "",
         },
         "layers": [],
         "groups": [],
-        "variables": {},
     }
 
     # Iterate over all loaded layers and collect type-specific metadata.
@@ -116,9 +90,11 @@ def build_project_snapshot():
     except Exception:
         pass
 
-    # Include QGIS project custom variables if any are defined.
+    # Include QGIS project custom variables only if defined.
     try:
-        snapshot["variables"] = prj.customVariables()
+        variables = prj.customVariables()
+        if variables:
+            snapshot["variables"] = variables
     except Exception:
         pass
 
