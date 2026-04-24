@@ -49,7 +49,8 @@ Two modes are available:
 - **Bilingual** interface: French and English
 - **Multi-backend LLM support**: LM Studio, Ollama, OpenAI, OpenRouter, Fireworks, any OpenAI-compatible endpoint
 - **SSE streaming** with graceful fallback to batch response
-- **Project context injection**: current layer names, geometry types, field schemas, and CRS are automatically included in the system prompt
+- **Project context injection**: current layer names, geometry types, and CRS are automatically included per request; field schemas are fetched on demand via `get_layer_fields`
+- **Prompt token gauge**: live status bar indicator showing estimated input tokens for the next request vs. the configured context window limit
 - **Process recording and replay**: save agent runs as `.aiprocess.json` templates with variable substitution
 - Real-time step visualization in the chat panel
 
@@ -128,8 +129,8 @@ Open **Options** from the plugin panel to configure the connection.
 | Language | Interface and system prompt language (French / English) |
 | History depth | Number of past conversation turns sent with each request (0–50) |
 | Streaming | Enable SSE streaming for real-time token output |
-| Project context | Inject a snapshot of the current QGIS project into the system prompt |
-| Max context size | Upper bound on the project snapshot size (8–1024 KB) |
+| Project context | Inject a snapshot of the current QGIS project (layers, geometry types, CRS) into each agent request |
+| Max context tokens | Context window limit used as the denominator in the prompt token gauge |
 | Agent max iterations | Maximum tool-calling rounds per agent run |
 | Show agent steps | Display intermediate steps in the chat panel |
 
@@ -157,11 +158,13 @@ Show me the 5 largest features in the buildings layer.
 
 Switch to **Agent** mode in the panel. Describe your task in plain language — the agent will:
 
-1. Detect the intent (read, process, style, select, edit…)
-2. Select the relevant tools from the library
+1. Classify the intent using a lightweight LLM pre-call (14 intent categories: `chat`, `read`, `stats`, `process`, `join`, `select`, `style`, `symbol`, `label`, `field`, `layer`, `export`, `view`, `raster`)
+2. Select only the relevant tools for those intents (max ~10 tools per call)
 3. Call them iteratively, passing results between steps
 4. Capture the map canvas after visual changes
 5. Synthesize a final answer
+
+Pure conversational requests (`chat` intent) skip the project snapshot injection entirely to avoid unnecessary token usage.
 
 Example prompts:
 ```
