@@ -25,17 +25,25 @@ Two modes are available:
 
 ## Features
 
-### Agent Mode (~30 native GIS tools)
+### Agent Mode (75 native GIS tools)
 
-| Category | Capabilities |
+| Intent | Tools |
 |---|---|
-| **Read / Inspect** | Layer info, field schemas, feature attributes, statistics, unique values, selected features |
-| **Geoprocessing** | Buffer, clip, intersect, dissolve, difference, union, reproject, spatial join, centroid, fix geometries, calculate geometry |
-| **Selection** | Select by expression, select by location, set layer filter, zoom to layer/feature |
-| **Styling** | Single symbol, categorized, graduated, rule-based, custom colors, opacity, visibility, marker shapes, canvas refresh |
-| **Labeling** | Enable/disable labels, font/size/color, buffer, placement, expression-based labels, shadow, background |
-| **Data Editing** | Add field, calculate field, load layer, export layer, geometry validation |
-| **Fallback** | Run arbitrary PyQGIS code, request additional tool intents, capture map canvas |
+| **read** | `get_project_info`, `get_layer_info`, `get_layer_fields`, `get_layer_features`, `get_layer_statistics`, `get_unique_values`, `get_selected_features`, `get_layer_extent`, `get_layer_style`, `get_label_settings` |
+| **stats** | `get_field_value_counts`, `get_statistics_by_group`, `get_field_percentiles`, `get_field_correlation`, `check_geometry_validity` |
+| **process** | `buffer`, `clip`, `intersection`, `dissolve`, `difference`, `union`, `reproject_layer`, `centroids`, `fix_geometries`, `calculate_geometry`, `run_processing_algorithm` |
+| **join** | `join_by_location`, `join_by_field`, `count_points_in_polygon`, `merge_layers`, `extract_by_expression`, `extract_by_location` |
+| **select** | `select_by_expression`, `select_by_location`, `set_layer_filter`, `clear_selection`, `invert_selection` |
+| **style** | `set_single_symbol`, `set_categorized_style`, `set_graduated_style`, `set_proportional_symbols`, `set_rule_based_style`, `set_custom_categorized_colors` |
+| **symbol** | `set_symbol_properties`, `set_marker_shape`, `set_layer_opacity`, `set_layer_blending_mode` |
+| **label** | `enable_labels`, `disable_labels`, `set_label_text_format`, `set_label_buffer`, `set_label_placement`, `set_label_expression`, `set_label_shadow`, `set_label_background`, `set_label_callout` |
+| **field** | `add_field`, `delete_field`, `rename_field`, `calculate_field` |
+| **layer** | `load_layer`, `rename_layer`, `remove_layer`, `set_layer_visibility`, `set_scale_based_visibility` |
+| **export** | `export_layer` |
+| **view** | `zoom_to_layer`, `zoom_to_feature`, `refresh_canvas` |
+| **raster** | `get_raster_info`, `get_raster_statistics`, `set_raster_style` |
+| **always** | `capture_map_canvas`, `request_additional_tools` |
+| **fallback** | `run_pyqgis_code` |
 
 ### Chat Mode
 
