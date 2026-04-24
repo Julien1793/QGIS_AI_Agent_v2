@@ -25,8 +25,8 @@ def _ok(tool: str, **kwargs) -> dict:
     return {"success": True, "tool": tool, **kwargs}
 
 
-def _err(tool: str, message: str) -> dict:
-    return {"success": False, "tool": tool, "error": message}
+def _err(tool: str, message: str, **kwargs) -> dict:
+    return {"success": False, "tool": tool, "error": message, **kwargs}
 
 
 # ══════════════════════════════════════════════════════════════
@@ -657,11 +657,15 @@ def get_layer_style(layer_name: str) -> dict:
 
 def set_single_symbol(layer_name: str, color: str,
                       opacity: float = 1.0,
-                      outline_color: str = "#000000",
-                      size: float = None) -> dict:
-    """Apply a single-symbol renderer with the given fill color, outline color, and opacity."""
-    from qgis.core import QgsVectorLayer, QgsSingleSymbolRenderer, QgsSymbol
+                      size: float = None,
+                      stroke_color: str = None,
+                      stroke_width: float = None) -> dict:
+    """Apply a single-symbol renderer with fill color, optional border and opacity."""
+    from qgis.core import (QgsVectorLayer, QgsSingleSymbolRenderer, QgsSymbol,
+                           QgsSimpleMarkerSymbolLayer, QgsSimpleLineSymbolLayer,
+                           QgsSimpleFillSymbolLayer)
     from qgis.PyQt.QtGui import QColor
+    from qgis.PyQt.QtCore import Qt
     layer = _get_layer(layer_name)
     if not layer or not isinstance(layer, QgsVectorLayer):
         return _err("set_single_symbol", f"Vector layer not found: {layer_name}")
@@ -671,6 +675,22 @@ def set_single_symbol(layer_name: str, color: str,
         symbol.setOpacity(opacity)
         if size is not None:
             symbol.setSize(size)
+        for i in range(symbol.symbolLayerCount()):
+            sl = symbol.symbolLayer(i)
+            if stroke_color is not None:
+                no_border = stroke_color.lower() == "none"
+                if isinstance(sl, (QgsSimpleMarkerSymbolLayer, QgsSimpleFillSymbolLayer)):
+                    if no_border:
+                        sl.setStrokeStyle(Qt.NoPen)
+                    else:
+                        sl.setStrokeColor(QColor(stroke_color))
+                elif isinstance(sl, QgsSimpleLineSymbolLayer):
+                    sl.setColor(QColor(stroke_color))
+            if stroke_width is not None:
+                if hasattr(sl, "setStrokeWidth"):
+                    sl.setStrokeWidth(stroke_width)
+                elif isinstance(sl, QgsSimpleLineSymbolLayer):
+                    sl.setWidth(stroke_width)
         renderer = QgsSingleSymbolRenderer(symbol)
         layer.setRenderer(renderer)
         layer.triggerRepaint()
@@ -681,13 +701,10 @@ def set_single_symbol(layer_name: str, color: str,
 
 
 def set_categorized_style(layer_name: str, field_name: str,
-                          color_ramp: str = "Spectral") -> dict:
-    """Apply a categorized renderer based on a field, with random per-category colors."""
+                          color_ramp_name: str = "Spectral") -> dict:
+    """Apply a categorized renderer based on a field, colours distributed across a ramp."""
     from qgis.core import (QgsVectorLayer, QgsCategorizedSymbolRenderer,
-                           QgsStyle, QgsRendererCategory, QgsSymbol,
-                           QgsApplication)
-    from qgis.PyQt.QtGui import QColor
-    import random
+                           QgsStyle, QgsRendererCategory, QgsSymbol)
     layer = _get_layer(layer_name)
     if not layer or not isinstance(layer, QgsVectorLayer):
         return _err("set_categorized_style",
@@ -697,12 +714,21 @@ def set_categorized_style(layer_name: str, field_name: str,
         return _err("set_categorized_style",
                     f"Field not found: {field_name}")
     try:
-        unique_vals = list(layer.uniqueValues(idx))
+        unique_vals = sorted(
+            [v for v in layer.uniqueValues(idx) if v is not None],
+            key=lambda x: str(x)
+        )
+        style = QgsStyle.defaultStyle()
+        ramp = style.colorRamp(color_ramp_name)
+        if ramp is None:
+            ramp = style.colorRamp("Spectral")
+        n = len(unique_vals)
         categories = []
-        for val in unique_vals:
+        for i, val in enumerate(unique_vals):
+            t = i / max(n - 1, 1)
+            color = ramp.color(t)
             symbol = QgsSymbol.defaultSymbol(layer.geometryType())
-            r, g, b = random.randint(30, 220), random.randint(30, 220), random.randint(30, 220)
-            symbol.setColor(QColor(r, g, b))
+            symbol.setColor(color)
             categories.append(QgsRendererCategory(val, symbol, str(val)))
         renderer = QgsCategorizedSymbolRenderer(field_name, categories)
         layer.setRenderer(renderer)
@@ -710,6 +736,7 @@ def set_categorized_style(layer_name: str, field_name: str,
         return _ok("set_categorized_style",
                    layer=layer_name,
                    field=field_name,
+                   color_ramp=color_ramp_name,
                    category_count=len(categories))
     except Exception as e:
         return _err("set_categorized_style", str(e))
@@ -718,7 +745,8 @@ def set_categorized_style(layer_name: str, field_name: str,
 def set_graduated_style(layer_name: str, field_name: str,
                         num_classes: int = 5,
                         color_ramp_name: str = "Blues",
-                        mode: int = 0) -> dict:
+                        mode: int = 0,
+                        invert_ramp: bool = False) -> dict:
     """
     Apply a graduated renderer on a numeric field using a color ramp.
     mode: 0=Quantile, 1=EqualInterval, 2=NaturalBreaks
@@ -734,8 +762,19 @@ def set_graduated_style(layer_name: str, field_name: str,
         ramp = style.colorRamp(color_ramp_name)
         if ramp is None:
             ramp = style.colorRamp("Blues")
+        if invert_ramp:
+            ramp.invert()
         renderer = QgsGraduatedSymbolRenderer(field_name)
-        renderer.updateClasses(layer, mode, num_classes)
+        try:
+            from qgis.core import (QgsClassificationEqualInterval,
+                                   QgsClassificationQuantile, QgsClassificationJenks)
+            _cls = {0: QgsClassificationQuantile,
+                    1: QgsClassificationEqualInterval,
+                    2: QgsClassificationJenks}
+            renderer.setClassificationMethod(_cls.get(mode, QgsClassificationEqualInterval)())
+            renderer.updateClasses(layer, num_classes)
+        except (ImportError, AttributeError, TypeError):
+            renderer.updateClasses(layer, mode, num_classes)
         renderer.updateColorRamp(ramp)
         layer.setRenderer(renderer)
         layer.triggerRepaint()
@@ -746,6 +785,75 @@ def set_graduated_style(layer_name: str, field_name: str,
                    color_ramp=color_ramp_name)
     except Exception as e:
         return _err("set_graduated_style", str(e))
+
+
+def set_proportional_symbols(layer_name: str, field_name: str,
+                             min_size: float = 1.0,
+                             max_size: float = 10.0,
+                             color: str = "#3498DB",
+                             min_value: float = None,
+                             max_value: float = None,
+                             stroke_color: str = "#ffffff",
+                             stroke_width: float = 0.2) -> dict:
+    """Apply a proportional symbol renderer: point size scales continuously with a numeric field."""
+    from qgis.core import (QgsVectorLayer, QgsMarkerSymbol,
+                           QgsSingleSymbolRenderer, QgsProperty, QgsUnitTypes)
+
+    layer = _get_layer(layer_name)
+    if not layer or not isinstance(layer, QgsVectorLayer):
+        return _err("set_proportional_symbols", f"Vector layer not found: {layer_name}")
+    if layer.geometryType() != 0:
+        return _err("set_proportional_symbols", "Proportional symbols require a Point layer")
+    if layer.fields().indexFromName(field_name) == -1:
+        return _err("set_proportional_symbols", f"Field not found: {field_name}")
+
+    try:
+        if min_value is None or max_value is None:
+            vals = []
+            for f in layer.getFeatures():
+                v = f[field_name]
+                if v is not None:
+                    try:
+                        vals.append(float(v))
+                    except (TypeError, ValueError):
+                        pass
+            if not vals:
+                return _err("set_proportional_symbols",
+                            f"No numeric values found in field '{field_name}'")
+            if min_value is None:
+                min_value = min(vals)
+            if max_value is None:
+                max_value = max(vals)
+
+        expr = (
+            f'scale_linear("{field_name}", {min_value}, {max_value}, '
+            f'{min_size}, {max_size})'
+        )
+
+        symbol = QgsMarkerSymbol.createSimple({
+            "name": "circle",
+            "color": color,
+            "outline_color": stroke_color,
+            "outline_width": str(stroke_width),
+        })
+        symbol.setSizeUnit(QgsUnitTypes.RenderMillimeters)
+        sl = symbol.symbolLayer(0)
+        sl.setDataDefinedProperty(
+            sl.PropertySize,
+            QgsProperty.fromExpression(expr)
+        )
+
+        layer.setRenderer(QgsSingleSymbolRenderer(symbol))
+        layer.triggerRepaint()
+        return _ok("set_proportional_symbols",
+                   layer=layer_name,
+                   field=field_name,
+                   min_value=min_value,
+                   max_value=max_value,
+                   min_size=min_size,
+                   max_size=max_size)
+    except Exception:
+        return _err("set_proportional_symbols", traceback.format_exc())
 
 
 def _get_all_symbols(renderer):
@@ -772,11 +880,13 @@ def _get_all_symbols(renderer):
 
 
 def set_symbol_properties(layer_name: str,
+                           color: str = None,
                            size: float = None,
                            stroke_color: str = None,
                            stroke_width: float = None,
-                           stroke_style: str = None) -> dict:
-    """Modify size, stroke color/width/style on the existing symbol(s) of a layer."""
+                           stroke_style: str = None,
+                           fill_style: str = None) -> dict:
+    """Modify fill color, size, stroke and fill pattern on the existing symbol(s) of a layer."""
     from qgis.core import (QgsVectorLayer, QgsSimpleMarkerSymbolLayer,
                            QgsSimpleLineSymbolLayer, QgsSimpleFillSymbolLayer)
     from qgis.PyQt.QtGui import QColor
@@ -788,6 +898,17 @@ def set_symbol_properties(layer_name: str,
         "dot":      Qt.DotLine,
         "dash_dot": Qt.DashDotLine,
         "no_line":  Qt.NoPen,
+    }
+
+    FILL_STYLE_MAP = {
+        "solid":      Qt.SolidPattern,
+        "no_fill":    Qt.NoBrush,
+        "horizontal": Qt.HorPattern,
+        "vertical":   Qt.VerPattern,
+        "cross":      Qt.CrossPattern,
+        "b_diagonal": Qt.BDiagPattern,
+        "f_diagonal": Qt.FDiagPattern,
+        "diagonal_x": Qt.DiagCrossPattern,
     }
 
     layer = _get_layer(layer_name)
@@ -809,6 +930,8 @@ def set_symbol_properties(layer_name: str,
                 sl = sym.symbolLayer(i)
 
                 if isinstance(sl, QgsSimpleMarkerSymbolLayer):
+                    if color is not None:
+                        sl.setColor(QColor(color))
                     if size is not None:
                         sl.setSize(size)
                     if stroke_color is not None:
@@ -820,6 +943,8 @@ def set_symbol_properties(layer_name: str,
                     applied_types.add("marker")
 
                 elif isinstance(sl, QgsSimpleLineSymbolLayer):
+                    if color is not None:
+                        sl.setColor(QColor(color))
                     if size is not None:
                         sl.setWidth(size)
                     if stroke_color is not None:
@@ -829,12 +954,16 @@ def set_symbol_properties(layer_name: str,
                     applied_types.add("line")
 
                 elif isinstance(sl, QgsSimpleFillSymbolLayer):
+                    if color is not None:
+                        sl.setColor(QColor(color))
                     if stroke_color is not None:
                         sl.setStrokeColor(QColor(stroke_color))
                     if stroke_width is not None:
                         sl.setStrokeWidth(stroke_width)
                     if stroke_style is not None:
                         sl.setStrokeStyle(STROKE_STYLE_MAP.get(stroke_style, Qt.SolidLine))
+                    if fill_style is not None:
+                        sl.setBrushStyle(FILL_STYLE_MAP.get(fill_style, Qt.SolidPattern))
                     applied_types.add("fill")
 
         layer.triggerRepaint()
@@ -992,6 +1121,61 @@ def set_layer_opacity(layer_name: str, opacity: float) -> dict:
     layer.setOpacity(max(0.0, min(1.0, opacity)))
     layer.triggerRepaint()
     return _ok("set_layer_opacity", layer=layer_name, opacity=opacity)
+
+
+def set_layer_blending_mode(layer_name: str, mode: str = "normal") -> dict:
+    """Set the compositing/blending mode of a layer (multiply, screen, overlay, etc.)."""
+    from qgis.PyQt.QtGui import QPainter
+
+    BLEND_MAP = {
+        "normal":     QPainter.CompositionMode_SourceOver,
+        "multiply":   QPainter.CompositionMode_Multiply,
+        "screen":     QPainter.CompositionMode_Screen,
+        "overlay":    QPainter.CompositionMode_Overlay,
+        "darken":     QPainter.CompositionMode_Darken,
+        "lighten":    QPainter.CompositionMode_Lighten,
+        "dodge":      QPainter.CompositionMode_ColorDodge,
+        "burn":       QPainter.CompositionMode_ColorBurn,
+        "hard_light": QPainter.CompositionMode_HardLight,
+        "soft_light": QPainter.CompositionMode_SoftLight,
+        "difference": QPainter.CompositionMode_Difference,
+        "exclusion":  QPainter.CompositionMode_Exclusion,
+    }
+    layer = _get_layer(layer_name)
+    if not layer:
+        return _err("set_layer_blending_mode", f"Layer not found: {layer_name}")
+    blend = BLEND_MAP.get(mode)
+    if blend is None:
+        return _err("set_layer_blending_mode", f"Unknown blending mode: {mode}")
+    layer.setBlendMode(blend)
+    layer.triggerRepaint()
+    return _ok("set_layer_blending_mode", layer=layer_name, mode=mode)
+
+
+def set_scale_based_visibility(layer_name: str,
+                               min_scale: float = 0,
+                               max_scale: float = 0) -> dict:
+    """Set minimum and maximum display scale for a layer. 0 disables a limit."""
+    layer = _get_layer(layer_name)
+    if not layer:
+        return _err("set_scale_based_visibility", f"Layer not found: {layer_name}")
+    try:
+        has_limit = min_scale > 0 or max_scale > 0
+        layer.setScaleBasedVisibility(has_limit)
+        if min_scale > 0:
+            layer.setMinimumScale(min_scale)
+        if max_scale > 0:
+            layer.setMaximumScale(max_scale)
+        if not has_limit:
+            layer.setMinimumScale(0)
+            layer.setMaximumScale(0)
+        layer.triggerRepaint()
+        return _ok("set_scale_based_visibility",
+                   layer=layer_name,
+                   min_scale=min_scale,
+                   max_scale=max_scale)
+    except Exception:
+        return _err("set_scale_based_visibility", traceback.format_exc())
 
 
 def set_layer_visibility(layer_name: str, visible: bool,
@@ -1216,6 +1400,184 @@ def export_layer(layer_name: str, output_path: str,
 # CATEGORY: ANALYSIS
 # ══════════════════════════════════════════════════════════════
 
+def get_field_value_counts(layer_name: str, field_name: str,
+                           sort_by: str = "count_desc") -> dict:
+    """Frequency table for a field: count and percentage per unique value."""
+    from qgis.core import QgsVectorLayer
+    layer = _get_layer(layer_name)
+    if not layer or not isinstance(layer, QgsVectorLayer):
+        return _err("get_field_value_counts", f"Vector layer not found: {layer_name}")
+    idx = layer.fields().indexFromName(field_name)
+    if idx == -1:
+        return _err("get_field_value_counts", f"Field not found: {field_name}")
+
+    counts: dict = {}
+    total = 0
+    for feat in layer.getFeatures():
+        val = feat[field_name]
+        key = str(val) if val is not None else "NULL"
+        counts[key] = counts.get(key, 0) + 1
+        total += 1
+
+    if sort_by == "count_asc":
+        rows = sorted(counts.items(), key=lambda x: x[1])
+    elif sort_by == "value":
+        rows = sorted(counts.items(), key=lambda x: x[0])
+    else:
+        rows = sorted(counts.items(), key=lambda x: -x[1])
+
+    table = [
+        {"value": v, "count": c, "percent": round(c / total * 100, 2) if total else 0}
+        for v, c in rows
+    ]
+    return _ok("get_field_value_counts",
+               layer=layer_name,
+               field=field_name,
+               total_features=total,
+               unique_values=len(counts),
+               frequencies=table)
+
+
+def get_statistics_by_group(layer_name: str, group_field: str,
+                             value_field: str) -> dict:
+    """Group-by statistics: min, max, mean, sum, count per group."""
+    from qgis.core import QgsVectorLayer
+    layer = _get_layer(layer_name)
+    if not layer or not isinstance(layer, QgsVectorLayer):
+        return _err("get_statistics_by_group", f"Vector layer not found: {layer_name}")
+    if layer.fields().indexFromName(group_field) == -1:
+        return _err("get_statistics_by_group", f"Group field not found: {group_field}")
+    if layer.fields().indexFromName(value_field) == -1:
+        return _err("get_statistics_by_group", f"Value field not found: {value_field}")
+
+    groups: dict = {}
+    for feat in layer.getFeatures():
+        grp = str(feat[group_field]) if feat[group_field] is not None else "NULL"
+        val = feat[value_field]
+        try:
+            val = float(val)
+        except (TypeError, ValueError):
+            continue
+        if grp not in groups:
+            groups[grp] = []
+        groups[grp].append(val)
+
+    results = []
+    for grp, vals in sorted(groups.items()):
+        n = len(vals)
+        s = sum(vals)
+        results.append({
+            "group": grp,
+            "count": n,
+            "sum": round(s, 6),
+            "mean": round(s / n, 6) if n else None,
+            "min": round(min(vals), 6),
+            "max": round(max(vals), 6),
+        })
+
+    return _ok("get_statistics_by_group",
+               layer=layer_name,
+               group_field=group_field,
+               value_field=value_field,
+               groups=results)
+
+
+def get_field_percentiles(layer_name: str, field_name: str,
+                          custom_percentile: float = None) -> dict:
+    """Compute median, Q1, Q3, IQR, and an optional custom percentile for a numeric field."""
+    from qgis.core import QgsVectorLayer
+    layer = _get_layer(layer_name)
+    if not layer or not isinstance(layer, QgsVectorLayer):
+        return _err("get_field_percentiles", f"Vector layer not found: {layer_name}")
+    if layer.fields().indexFromName(field_name) == -1:
+        return _err("get_field_percentiles", f"Field not found: {field_name}")
+
+    values = []
+    for feat in layer.getFeatures():
+        val = feat[field_name]
+        try:
+            values.append(float(val))
+        except (TypeError, ValueError):
+            pass
+
+    if not values:
+        return _err("get_field_percentiles", "No numeric values found in field.")
+
+    values.sort()
+    n = len(values)
+
+    def _percentile(p: float) -> float:
+        idx = (p / 100) * (n - 1)
+        lo, hi = int(idx), min(int(idx) + 1, n - 1)
+        return round(values[lo] + (idx - lo) * (values[hi] - values[lo]), 6)
+
+    result = {
+        "count": n,
+        "p25_q1": _percentile(25),
+        "p50_median": _percentile(50),
+        "p75_q3": _percentile(75),
+        "iqr": round(_percentile(75) - _percentile(25), 6),
+    }
+    if custom_percentile is not None:
+        p = max(0.0, min(100.0, float(custom_percentile)))
+        result[f"p{int(p)}"] = _percentile(p)
+
+    return _ok("get_field_percentiles",
+               layer=layer_name,
+               field=field_name,
+               **result)
+
+
+def get_field_correlation(layer_name: str, field_a: str, field_b: str) -> dict:
+    """Pearson correlation coefficient between two numeric fields."""
+    from qgis.core import QgsVectorLayer
+    layer = _get_layer(layer_name)
+    if not layer or not isinstance(layer, QgsVectorLayer):
+        return _err("get_field_correlation", f"Vector layer not found: {layer_name}")
+    for f in (field_a, field_b):
+        if layer.fields().indexFromName(f) == -1:
+            return _err("get_field_correlation", f"Field not found: {f}")
+
+    xs, ys = [], []
+    for feat in layer.getFeatures():
+        try:
+            x = float(feat[field_a])
+            y = float(feat[field_b])
+            xs.append(x)
+            ys.append(y)
+        except (TypeError, ValueError):
+            pass
+
+    n = len(xs)
+    if n < 2:
+        return _err("get_field_correlation", f"Not enough valid pairs ({n}) to compute correlation.")
+
+    mean_x = sum(xs) / n
+    mean_y = sum(ys) / n
+    cov = sum((xs[i] - mean_x) * (ys[i] - mean_y) for i in range(n))
+    std_x = (sum((v - mean_x) ** 2 for v in xs)) ** 0.5
+    std_y = (sum((v - mean_y) ** 2 for v in ys)) ** 0.5
+
+    if std_x == 0 or std_y == 0:
+        return _err("get_field_correlation", "One of the fields has zero variance — correlation is undefined.")
+
+    r = round(cov / (std_x * std_y), 6)
+    return _ok("get_field_correlation",
+               layer=layer_name,
+               field_a=field_a,
+               field_b=field_b,
+               pearson_r=r,
+               valid_pairs=n,
+               interpretation=(
+                   "strong positive" if r > 0.7 else
+                   "moderate positive" if r > 0.3 else
+                   "weak positive" if r > 0 else
+                   "weak negative" if r > -0.3 else
+                   "moderate negative" if r > -0.7 else
+                   "strong negative"
+               ))
+
+
 def calculate_geometry(layer_name: str,
                        output_layer_name: str = "geometry_calculated") -> dict:
     """Compute area, length, and perimeter and add them as new fields."""
@@ -1344,12 +1706,21 @@ def get_label_settings(layer_name: str) -> dict:
         buf = fmt.buffer()
         shadow = fmt.shadow()
 
+        callout_enabled = False
+        callout_type = ""
+        if hasattr(settings, "callout") and settings.callout():
+            callout_enabled = settings.callout().enabled()
+            callout_type = type(settings.callout()).__name__
+
         return _ok("get_label_settings",
                    layer=layer_name,
                    enabled=layer.labelsEnabled(),
                    field_name=settings.fieldName,
                    is_expression=settings.isExpression,
                    placement=_placement_name(settings.placement),
+                   distance=settings.dist,
+                   offset_x=settings.xOffset,
+                   offset_y=settings.yOffset,
                    font_family=fmt.font().family(),
                    font_size=fmt.size(),
                    color=fmt.color().name(),
@@ -1358,7 +1729,9 @@ def get_label_settings(layer_name: str) -> dict:
                    buffer_enabled=buf.enabled(),
                    buffer_size=buf.size(),
                    buffer_color=buf.color().name(),
-                   shadow_enabled=shadow.enabled())
+                   shadow_enabled=shadow.enabled(),
+                   callout_enabled=callout_enabled,
+                   callout_type=callout_type)
     except Exception:
         return _err("get_label_settings", traceback.format_exc())
 
@@ -1371,8 +1744,7 @@ def enable_labels(layer_name: str, field_name: str,
                   italic: bool = False,
                   placement: str = None) -> dict:
     """Enable labeling on a vector layer with key formatting in a single call."""
-    from qgis.core import (QgsVectorLayer, QgsPalLayerSettings,
-                           QgsTextFormat, QgsUnitTypes)
+    from qgis.core import (QgsVectorLayer, QgsPalLayerSettings, QgsTextFormat)
     from qgis.PyQt.QtGui import QFont, QColor
 
     layer = _get_layer(layer_name)
@@ -1402,7 +1774,7 @@ def enable_labels(layer_name: str, field_name: str,
         font.setItalic(italic)
         text_format.setFont(font)
         text_format.setSize(font_size)
-        text_format.setSizeUnit(QgsUnitTypes.RenderPoints)
+        text_format.setSizeUnit(_render_unit("pt"))
         text_format.setColor(QColor(color))
         settings.setFormat(text_format)
 
@@ -1492,7 +1864,7 @@ def set_label_buffer(layer_name: str,
                      color: str = "#FFFFFF",
                      opacity: float = 1.0) -> dict:
     """Configure the text halo/buffer around layer labels."""
-    from qgis.core import (QgsVectorLayer, QgsTextBufferSettings, QgsUnitTypes)
+    from qgis.core import (QgsVectorLayer, QgsTextBufferSettings)
     from qgis.PyQt.QtGui import QColor
 
     layer = _get_layer(layer_name)
@@ -1509,7 +1881,7 @@ def set_label_buffer(layer_name: str,
         buf = QgsTextBufferSettings()
         buf.setEnabled(enabled)
         buf.setSize(size)
-        buf.setSizeUnit(QgsUnitTypes.RenderMillimeters)
+        buf.setSizeUnit(_render_unit("mm"))
         buf.setColor(QColor(color))
         buf.setOpacity(max(0.0, min(1.0, opacity)))
 
@@ -1524,14 +1896,36 @@ def set_label_buffer(layer_name: str,
         return _err("set_label_buffer", traceback.format_exc())
 
 
+_OFFSET_UNIT_MAP = {
+    "mm":  ("RenderMillimeters", "Millimeters"),
+    "pt":  ("RenderPoints",      "Points"),
+    "px":  ("RenderPixels",      "Pixels"),
+    "map": ("RenderMapUnits",    "MapUnits"),
+}
+
+
+def _render_unit(unit_str: str):
+    """Return a render unit enum compatible with QGIS 3.22+ (Qgis.RenderUnit) and 3.36+ fallback."""
+    old_attr, new_attr = _OFFSET_UNIT_MAP.get(unit_str.lower(), ("RenderMillimeters", "Millimeters"))
+    try:
+        from qgis.core import Qgis
+        return getattr(Qgis.RenderUnit, new_attr)
+    except AttributeError:
+        from qgis.core import QgsUnitTypes
+        return getattr(QgsUnitTypes, old_attr, QgsUnitTypes.RenderMillimeters)
+
+
 def set_label_placement(layer_name: str,
-                        placement: str,
-                        offset_x: float = 0,
-                        offset_y: float = 0,
+                        placement: str = None,
+                        distance: float = None,
+                        distance_units: str = "mm",
+                        offset_x: float = None,
+                        offset_y: float = None,
+                        offset_units: str = "mm",
                         min_scale: float = 0,
                         max_scale: float = 0) -> dict:
-    """Change label placement mode, offset, and optional scale-based visibility."""
-    from qgis.core import QgsVectorLayer, QgsUnitTypes
+    """Change label placement mode, radial distance, cartesian offset, and scale visibility."""
+    from qgis.core import QgsVectorLayer
 
     layer = _get_layer(layer_name)
     if not layer or not isinstance(layer, QgsVectorLayer):
@@ -1540,17 +1934,27 @@ def set_label_placement(layer_name: str,
         return _err("set_label_placement",
                     "No labels configured. Use enable_labels first.")
 
-    if placement not in _PLACEMENT_STR_TO_INT:
+    if placement is not None and placement not in _PLACEMENT_STR_TO_INT:
         return _err("set_label_placement", f"Unknown placement: {placement}")
 
     try:
         settings = _get_pal_settings(layer)
-        settings.placement = _placement_enum(placement)
 
-        if offset_x != 0 or offset_y != 0:
-            settings.offsetUnits = QgsUnitTypes.RenderMillimeters
+        if placement is not None:
+            settings.placement = _placement_enum(placement)
+
+        # dist = radial distance from feature (Around Point / Line / Curved / Perimeter)
+        if distance is not None:
+            settings.dist = distance
+            settings.distUnits = _render_unit(distance_units)
+
+        # xOffset/yOffset = Cartesian shift applied after placement
+        if offset_x is not None:
             settings.xOffset = offset_x
+            settings.offsetUnits = _render_unit(offset_units)
+        if offset_y is not None:
             settings.yOffset = offset_y
+            settings.offsetUnits = _render_unit(offset_units)
 
         if min_scale > 0 or max_scale > 0:
             settings.scaleVisibility = True
@@ -1564,7 +1968,9 @@ def set_label_placement(layer_name: str,
         return _ok("set_label_placement",
                    layer=layer_name,
                    placement=placement,
-                   offset_x=offset_x, offset_y=offset_y)
+                   distance=distance, distance_units=distance_units,
+                   offset_x=offset_x, offset_y=offset_y,
+                   offset_units=offset_units)
     except Exception:
         return _err("set_label_placement", traceback.format_exc())
 
@@ -1604,7 +2010,7 @@ def set_label_shadow(layer_name: str,
                      offset_distance: float = 1.0,
                      offset_angle: int = 315) -> dict:
     """Add or remove a drop shadow from layer labels."""
-    from qgis.core import (QgsVectorLayer, QgsTextShadowSettings, QgsUnitTypes)
+    from qgis.core import (QgsVectorLayer, QgsTextShadowSettings)
     from qgis.PyQt.QtGui import QColor
 
     layer = _get_layer(layer_name)
@@ -1623,9 +2029,9 @@ def set_label_shadow(layer_name: str,
         shadow.setColor(QColor(color))
         shadow.setOpacity(max(0.0, min(1.0, opacity)))
         shadow.setBlurRadius(blur_radius)
-        shadow.setBlurUnit(QgsUnitTypes.RenderMillimeters)
+        shadow.setBlurUnit(_render_unit("mm"))
         shadow.setOffsetDistance(offset_distance)
-        shadow.setOffsetUnit(QgsUnitTypes.RenderMillimeters)
+        shadow.setOffsetUnit(_render_unit("mm"))
         shadow.setOffsetAngle(offset_angle)
 
         text_format.setShadow(shadow)
@@ -1658,7 +2064,7 @@ def set_label_background(layer_name: str,
                          size_y: float = 0.5,
                          opacity: float = 1.0) -> dict:
     """Add a filled shape background behind layer labels."""
-    from qgis.core import (QgsVectorLayer, QgsTextBackgroundSettings, QgsUnitTypes)
+    from qgis.core import (QgsVectorLayer, QgsTextBackgroundSettings)
     from qgis.PyQt.QtGui import QColor
     from qgis.PyQt.QtCore import QSizeF
 
@@ -1684,9 +2090,9 @@ def set_label_background(layer_name: str,
         bg.setFillColor(QColor(fill_color))
         bg.setStrokeColor(QColor(stroke_color))
         bg.setStrokeWidth(float(stroke_width))
-        bg.setStrokeWidthUnit(QgsUnitTypes.RenderMillimeters)
+        bg.setStrokeWidthUnit(_render_unit("mm"))
         bg.setSize(QSizeF(float(size_x), float(size_y)))
-        bg.setSizeUnit(QgsUnitTypes.RenderMillimeters)
+        bg.setSizeUnit(_render_unit("mm"))
         bg.setOpacity(max(0.0, min(1.0, float(opacity))))
 
         text_format.setBackground(bg)
@@ -1700,6 +2106,85 @@ def set_label_background(layer_name: str,
                    size_x=size_x, size_y=size_y, opacity=opacity)
     except Exception:
         return _err("set_label_background", traceback.format_exc())
+
+
+_CALLOUT_STYLES = ("simple", "manhattan", "curved", "balloon")
+
+
+def set_label_callout(layer_name: str,
+                      enabled: bool = True,
+                      style: str = "simple",
+                      line_color: str = "#000000",
+                      line_width: float = 0.3,
+                      min_length: float = 0.0) -> dict:
+    """Configure a callout line connecting a displaced label to its feature."""
+    from qgis.core import (QgsVectorLayer, QgsSimpleLineCallout, QgsLineSymbol)
+
+    layer = _get_layer(layer_name)
+    if not layer or not isinstance(layer, QgsVectorLayer):
+        return _err("set_label_callout", f"Vector layer not found: {layer_name}")
+    if not layer.labeling():
+        return _err("set_label_callout",
+                    "No labels configured. Use enable_labels first.")
+    if style not in _CALLOUT_STYLES:
+        return _err("set_label_callout",
+                    f"Unknown style: {style}. Valid: {list(_CALLOUT_STYLES)}")
+
+    try:
+        settings = _get_pal_settings(layer)
+
+        if not enabled:
+            existing = settings.callout()
+            callout = existing.clone() if existing else QgsSimpleLineCallout()
+            callout.setEnabled(False)
+            settings.setCallout(callout)
+            _apply_pal_settings(layer, settings)
+            return _ok("set_label_callout", layer=layer_name, enabled=False)
+
+        if style == "manhattan":
+            from qgis.core import QgsManhattanLineCallout
+            callout = QgsManhattanLineCallout()
+        elif style == "curved":
+            try:
+                from qgis.core import QgsCurvedLineCallout
+                callout = QgsCurvedLineCallout()
+            except ImportError:
+                callout = QgsSimpleLineCallout()
+        elif style == "balloon":
+            try:
+                from qgis.core import QgsBalloonCallout, QgsFillSymbol
+                callout = QgsBalloonCallout()
+                fill_sym = QgsFillSymbol.createSimple({
+                    "color": "#ffffff80",
+                    "outline_color": line_color,
+                    "outline_width": str(line_width),
+                })
+                callout.setFillSymbol(fill_sym)
+            except ImportError:
+                callout = QgsSimpleLineCallout()
+        else:
+            callout = QgsSimpleLineCallout()
+
+        if hasattr(callout, "lineSymbol"):
+            line_sym = QgsLineSymbol.createSimple({
+                "color": line_color,
+                "width": str(line_width),
+            })
+            callout.setLineSymbol(line_sym)
+
+        if min_length > 0:
+            callout.setMinimumLength(min_length)
+            callout.setMinimumLengthUnit(_render_unit("mm"))
+
+        callout.setEnabled(True)
+        settings.setCallout(callout)
+        _apply_pal_settings(layer, settings)
+
+        return _ok("set_label_callout",
+                   layer=layer_name, enabled=True,
+                   style=style, line_color=line_color, line_width=line_width)
+    except Exception:
+        return _err("set_label_callout", traceback.format_exc())
 
 
 # ══════════════════════════════════════════════════════════════
@@ -1875,8 +2360,10 @@ def run_pyqgis_code(code: str, executor=None) -> dict:
     if executor is None:
         return _err("run_pyqgis_code",
                     "executor not available (local mode only)")
-    success, error = executor.execute_code(code)
+    success, error, print_output = executor.execute_code(code)
     if success:
         return _ok("run_pyqgis_code", code_executed=True,
-                   warning=error)
-    return _err("run_pyqgis_code", error or "Execution error")
+                   warning=error,
+                   print_output=print_output or None)
+    return _err("run_pyqgis_code", error or "Execution error",
+                print_output=print_output or None)

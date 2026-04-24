@@ -5,6 +5,8 @@ from qgis.core import QgsProject, QgsVectorLayer, QgsApplication, QgsMessageLog,
 import processing
 import traceback
 import warnings
+import io
+import contextlib
 
 from ..utils.translation import get_translations
 
@@ -65,32 +67,34 @@ class CodeExecutor:
         self.last_code = code or ""
         ok = False
         err_msg = None
+        stdout_buf = io.StringIO()
 
         # Reset warning buffer and execution flag before running.
         self._warnings = []
         self._executing = True
 
         try:
-            # Also capture Python-level warnings via the warnings module.
-            with warnings.catch_warnings(record=True) as pywarns:
-                warnings.simplefilter("always")
+            with contextlib.redirect_stdout(stdout_buf):
+                # Also capture Python-level warnings via the warnings module.
+                with warnings.catch_warnings(record=True) as pywarns:
+                    warnings.simplefilter("always")
 
-                exec(code, {
-                    'iface': self.iface,
-                    'QgsProject': QgsProject,
-                    'QgsVectorLayer': QgsVectorLayer,
-                    'processing': processing,
-                    'Qgis': Qgis,
-                })
+                    exec(code, {
+                        'iface': self.iface,
+                        'QgsProject': QgsProject,
+                        'QgsVectorLayer': QgsVectorLayer,
+                        'processing': processing,
+                        'Qgis': Qgis,
+                    })
 
-                for w in pywarns:
-                    try:
-                        loc = f"{w.filename}:{w.lineno}"
-                        self._warnings.append(
-                            f"[PythonWarning] {str(w.message)}  ({loc})"
-                        )
-                    except Exception:
-                        pass
+                    for w in pywarns:
+                        try:
+                            loc = f"{w.filename}:{w.lineno}"
+                            self._warnings.append(
+                                f"[PythonWarning] {str(w.message)}  ({loc})"
+                            )
+                        except Exception:
+                            pass
 
             ok = True
 
@@ -108,29 +112,27 @@ class CodeExecutor:
                 pass
             self._executing = False
 
+        captured_output = stdout_buf.getvalue().strip()
+        if len(captured_output) > 8000:
+            captured_output = captured_output[:8000] + "\n[... output truncated at 8000 characters ...]"
+
         # --- Blocking error: code raised an exception ---
         if not ok:
             title = self.t.get("exec_error_title", "Execution error")
             self.iface.messageBar().pushCritical(title, (err_msg or ""))
 
-            # Build the localised error string ready for the Debug tab.
-            #err_label = "Erreur :" if self._lang == "fr" else "Error :"
-            err_label = self.t.get("error_to_fix","Error :")
+            err_label = self.t.get("error_to_fix", "Error :")
             composed = f"{err_label} {err_msg or ''}".strip()
             if self.on_error_callback:
                 self.on_error_callback(code, composed)
-            return False, err_msg
+            return False, err_msg, captured_output
 
         # --- Success with QGIS or Python warnings ---
         if self._warnings:
-            # Show a non-blocking notification in the QGIS message bar.
             self.iface.messageBar().pushWarning(
                 self.t.get("dock_title", "AI Assistant"),
                 self.t.get("exec_warn_to_debug", "Execution finished with warnings — opening Debug tab.")
             )
-            # Forward unique warnings to the QGIS message log so they are
-            # visible in the Log Messages panel (deduplicate to avoid repeats
-            # when the same warning fires multiple times in the executed code).
             tag = self.t.get("dock_title", "AI Assistant")
             seen = set()
             for w in self._warnings:
@@ -141,15 +143,14 @@ class CodeExecutor:
             warn_prefix = self.t.get("warnings_prefix_debug", "QGIS warnings during execution:")
             warn_text = "\n".join(self._warnings)
 
-            # Pre-compose the Debug tab text so the UI does not inject a second error prefix.
             composed = f"{warn_label} {warn_prefix}\n{warn_text}".strip()
             if self.on_error_callback:
                 self.on_error_callback(code, composed)
-            return True, warn_text
+            return True, warn_text, captured_output
 
         # --- Clean success: no errors, no warnings ---
         self.iface.messageBar().pushSuccess(
             self.t.get("dock_title", "AI Assistant"),
             self.t.get("exec_success", "Execution successful.")
         )
-        return True, None
+        return True, None, captured_output

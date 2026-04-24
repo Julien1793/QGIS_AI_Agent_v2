@@ -3,7 +3,7 @@
 > A QGIS plugin that brings AI-powered natural language control to your GIS workflows.  
 > Talk to your maps. Let the agent do the work.
 
-![QGIS Version](https://img.shields.io/badge/QGIS-3.22%2B-green)
+![QGIS Version](https://img.shields.io/badge/QGIS-3.44%2B-green)
 ![Python](https://img.shields.io/badge/Python-3.x-blue)
 ![License](https://img.shields.io/badge/license-GPL--2.0-lightgrey)
 ![Status](https://img.shields.io/badge/status-experimental-orange)
@@ -57,7 +57,7 @@ Two modes are available:
 
 ## Requirements
 
-- QGIS **3.22** or later
+- QGIS **3.44** or later
 - Python **3.x** (bundled with QGIS)
 - Access to an LLM via a local server or a cloud API key
 

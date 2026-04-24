@@ -974,7 +974,15 @@ REGISTRY = {
                         },
                         "size": {
                             "type": "number",
-                            "description": "Size (for points). Leave null for the default value.",
+                            "description": "Size in mm (points). Leave null for the default value.",
+                        },
+                        "stroke_color": {
+                            "type": "string",
+                            "description": "Border/outline colour in hex. Default '#000000'. Pass 'none' to remove the border.",
+                        },
+                        "stroke_width": {
+                            "type": "number",
+                            "description": "Border width in mm. Default 0.26.",
                         },
                     },
                     "required": ["layer_name", "color"],
@@ -1002,6 +1010,11 @@ REGISTRY = {
                         "field_name": {
                             "type": "string",
                             "description": "Field to base the categorisation on.",
+                        },
+                        "color_ramp_name": {
+                            "type": "string",
+                            "description": "QGIS colour ramp to distribute across categories. Ex: 'Spectral', 'Set1', 'Pastel1', 'Dark2', 'Paired', 'tab10'. Default 'Spectral'.",
+                            "default": "Spectral",
                         },
                     },
                     "required": ["layer_name", "field_name"],
@@ -1045,6 +1058,73 @@ REGISTRY = {
                             "description": "0=Quantile, 1=Equal intervals, 2=Natural breaks. Default 0.",
                             "default": 0,
                         },
+                        "invert_ramp": {
+                            "type": "boolean",
+                            "description": "Invert the colour ramp direction. Default false.",
+                            "default": False,
+                        },
+                    },
+                    "required": ["layer_name", "field_name"],
+                },
+            },
+        },
+    },
+
+    "set_proportional_symbols": {
+        "intents": ["style"],
+        "handler": "set_proportional_symbols",
+        "schema": {
+            "type": "function",
+            "function": {
+                "name": "set_proportional_symbols",
+                "description": (
+                    "Applies a proportional symbol renderer on a point layer: each point is scaled "
+                    "in size proportionally to the value of a numeric field. "
+                    "Use for 'symbols proportional to population', 'size by volume', 'graduated size'. "
+                    "The size varies continuously (not by class), unlike set_graduated_style which uses colour bands. "
+                    "min_value/max_value are auto-computed from the data if omitted."
+                ),
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "layer_name": {"type": "string"},
+                        "field_name": {
+                            "type": "string",
+                            "description": "Numeric field driving the symbol size.",
+                        },
+                        "min_size": {
+                            "type": "number",
+                            "description": "Symbol size in mm for the smallest value. Default 1.0.",
+                            "default": 1.0,
+                        },
+                        "max_size": {
+                            "type": "number",
+                            "description": "Symbol size in mm for the largest value. Default 10.0.",
+                            "default": 10.0,
+                        },
+                        "color": {
+                            "type": "string",
+                            "description": "Fill colour in hex. Default '#3498DB'.",
+                            "default": "#3498DB",
+                        },
+                        "min_value": {
+                            "type": "number",
+                            "description": "Field value mapped to min_size. Auto-computed if omitted.",
+                        },
+                        "max_value": {
+                            "type": "number",
+                            "description": "Field value mapped to max_size. Auto-computed if omitted.",
+                        },
+                        "stroke_color": {
+                            "type": "string",
+                            "description": "Border colour in hex. Default '#ffffff'.",
+                            "default": "#ffffff",
+                        },
+                        "stroke_width": {
+                            "type": "number",
+                            "description": "Border width in mm. Default 0.2.",
+                            "default": 0.2,
+                        },
                     },
                     "required": ["layer_name", "field_name"],
                 },
@@ -1072,6 +1152,10 @@ REGISTRY = {
                     "type": "object",
                     "properties": {
                         "layer_name": {"type": "string"},
+                        "color": {
+                            "type": "string",
+                            "description": "Fill colour in hex. Changes the fill on the existing renderer without resetting it. Ex: '#3498DB'.",
+                        },
                         "size": {
                             "type": "number",
                             "description": "Marker/point size or line width in mm.",
@@ -1088,6 +1172,11 @@ REGISTRY = {
                             "type": "string",
                             "enum": ["solid", "dash", "dot", "dash_dot", "no_line"],
                             "description": "Line/border style.",
+                        },
+                        "fill_style": {
+                            "type": "string",
+                            "enum": ["solid", "no_fill", "horizontal", "vertical", "cross", "b_diagonal", "f_diagonal", "diagonal_x"],
+                            "description": "Polygon fill pattern. 'solid'=plain fill, 'no_fill'=transparent, others=hatch patterns. Polygons only.",
                         },
                     },
                     "required": ["layer_name"],
@@ -1239,6 +1328,76 @@ REGISTRY = {
                         },
                     },
                     "required": ["layer_name", "opacity"],
+                },
+            },
+        },
+    },
+
+    "set_layer_blending_mode": {
+        "intents": ["style"],
+        "handler": "set_layer_blending_mode",
+        "schema": {
+            "type": "function",
+            "function": {
+                "name": "set_layer_blending_mode",
+                "description": (
+                    "Sets the blending/compositing mode of a layer. "
+                    "Use for 'multiply', 'screen', 'overlay', 'darken effects'. "
+                    "Modes: 'normal' (default), 'multiply' (darkens, good for overlays on imagery), "
+                    "'screen' (brightens), 'overlay' (contrast), 'darken', 'lighten', "
+                    "'dodge' (colour dodge), 'burn' (colour burn), 'hard_light', 'soft_light', "
+                    "'difference', 'exclusion'."
+                ),
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "layer_name": {"type": "string"},
+                        "mode": {
+                            "type": "string",
+                            "enum": [
+                                "normal", "multiply", "screen", "overlay",
+                                "darken", "lighten", "dodge", "burn",
+                                "hard_light", "soft_light", "difference", "exclusion"
+                            ],
+                            "description": "Blending mode.",
+                            "default": "normal",
+                        },
+                    },
+                    "required": ["layer_name", "mode"],
+                },
+            },
+        },
+    },
+
+    "set_scale_based_visibility": {
+        "intents": ["style", "view"],
+        "handler": "set_scale_based_visibility",
+        "schema": {
+            "type": "function",
+            "function": {
+                "name": "set_scale_based_visibility",
+                "description": (
+                    "Controls at which map scales a layer is visible. "
+                    "Use for 'only show at zoom level X', 'hide when zoomed out beyond 1:100000', "
+                    "'visible between 1:5000 and 1:50000'. "
+                    "Pass 0 to disable a limit. Set both to 0 to remove all scale restrictions."
+                ),
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "layer_name": {"type": "string"},
+                        "min_scale": {
+                            "type": "number",
+                            "description": "Layer is hidden when zoomed out beyond this scale (e.g. 100000 = 1:100000). 0 = no limit.",
+                            "default": 0,
+                        },
+                        "max_scale": {
+                            "type": "number",
+                            "description": "Layer is hidden when zoomed in beyond this scale (e.g. 5000 = 1:5000). 0 = no limit.",
+                            "default": 0,
+                        },
+                    },
+                    "required": ["layer_name"],
                 },
             },
         },
@@ -1464,10 +1623,14 @@ REGISTRY = {
             "function": {
                 "name": "set_label_placement",
                 "description": (
-                    "Changes label placement mode and scale-based visibility options. "
-                    "Points → 'around_point' (offset) or 'over_point' (centred). "
+                    "Changes label placement mode, distance, cartesian offset, and scale-based visibility. "
+                    "Points → 'around_point' (near feature) or 'over_point' (centred). "
                     "Lines → 'line' (along) or 'curved'. "
                     "Polygons → 'horizontal' (flat) or 'perimeter' (on border). "
+                    "All parameters are optional — omit placement to keep the current mode. "
+                    "distance = radial distance from the feature, used by around_point / line / curved / perimeter modes "
+                    "(this is the 'Distance' field visible in the QGIS label placement UI). "
+                    "offset_x/offset_y = Cartesian shift applied after placement (separate from distance). "
                     "Labels must be enabled first with enable_labels."
                 ),
                 "parameters": {
@@ -1477,17 +1640,35 @@ REGISTRY = {
                         "placement": {
                             "type": "string",
                             "enum": ["around_point", "over_point", "line", "curved", "horizontal", "perimeter", "free"],
-                            "description": "Label placement mode.",
+                            "description": "Label placement mode. Omit to keep the current mode.",
+                        },
+                        "distance": {
+                            "type": "number",
+                            "description": (
+                                "Radial distance between the label and the feature. "
+                                "This is the main 'Distance' control for around_point, line, curved and perimeter modes. "
+                                "E.g. 2.0 places the label 2 mm away from the point. Units set by distance_units."
+                            ),
+                        },
+                        "distance_units": {
+                            "type": "string",
+                            "enum": ["mm", "pt", "px", "map"],
+                            "description": "Unit for distance. Default 'mm'.",
+                            "default": "mm",
                         },
                         "offset_x": {
                             "type": "number",
-                            "description": "Horizontal offset in mm. Default 0.",
-                            "default": 0,
+                            "description": "Cartesian horizontal shift after placement (positive = right). Units set by offset_units.",
                         },
                         "offset_y": {
                             "type": "number",
-                            "description": "Vertical offset in mm. Default 0.",
-                            "default": 0,
+                            "description": "Cartesian vertical shift after placement (positive = up). Units set by offset_units.",
+                        },
+                        "offset_units": {
+                            "type": "string",
+                            "enum": ["mm", "pt", "px", "map"],
+                            "description": "Unit for offset_x/offset_y. Default 'mm'.",
+                            "default": "mm",
                         },
                         "min_scale": {
                             "type": "number",
@@ -1500,7 +1681,7 @@ REGISTRY = {
                             "default": 0,
                         },
                     },
-                    "required": ["layer_name", "placement"],
+                    "required": ["layer_name"],
                 },
             },
         },
@@ -1644,6 +1825,57 @@ REGISTRY = {
                             "type": "number",
                             "description": "Background opacity from 0.0 to 1.0. Default 1.0.",
                             "default": 1.0,
+                        },
+                    },
+                    "required": ["layer_name"],
+                },
+            },
+        },
+    },
+
+    "set_label_callout": {
+        "intents": ["style"],
+        "handler": "set_label_callout",
+        "schema": {
+            "type": "function",
+            "function": {
+                "name": "set_label_callout",
+                "description": (
+                    "Adds or removes a callout line connecting a displaced label to its feature. "
+                    "Useful when labels are pushed far from their feature (e.g. on dense maps). "
+                    "Styles: 'simple' (straight line), 'manhattan' (right-angle/orthogonal), "
+                    "'curved' (smooth Bézier curve), 'balloon' (speech-bubble shape with fill). "
+                    "Labels must be enabled first with enable_labels."
+                ),
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "layer_name": {"type": "string"},
+                        "enabled": {
+                            "type": "boolean",
+                            "description": "Enable (true) or disable (false) the callout. Default true.",
+                            "default": True,
+                        },
+                        "style": {
+                            "type": "string",
+                            "enum": ["simple", "manhattan", "curved", "balloon"],
+                            "description": "Callout style. Default 'simple'.",
+                            "default": "simple",
+                        },
+                        "line_color": {
+                            "type": "string",
+                            "description": "Line (or balloon border) colour in hex. Default '#000000' (black).",
+                            "default": "#000000",
+                        },
+                        "line_width": {
+                            "type": "number",
+                            "description": "Line width in mm. Default 0.3.",
+                            "default": 0.3,
+                        },
+                        "min_length": {
+                            "type": "number",
+                            "description": "Minimum callout length in mm. Callouts shorter than this are not drawn. Default 0 (always draw).",
+                            "default": 0.0,
                         },
                     },
                     "required": ["layer_name"],
@@ -2034,6 +2266,134 @@ REGISTRY = {
     # ══════════════════════════════════════════════════════════
     # ANALYSIS
     # ══════════════════════════════════════════════════════════
+
+    "get_field_value_counts": {
+        "intents": ["read", "analyse"],
+        "handler": "get_field_value_counts",
+        "schema": {
+            "type": "function",
+            "function": {
+                "name": "get_field_value_counts",
+                "description": (
+                    "Returns a frequency table for a field: count and percentage for each unique value. "
+                    "Use for 'how many features per type', 'distribution of values', "
+                    "'what is the most common category'. "
+                    "Prefer over get_unique_values when you need counts, not just the list of values."
+                ),
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "layer_name": {"type": "string"},
+                        "field_name": {
+                            "type": "string",
+                            "description": "Field to compute the frequency table on.",
+                        },
+                        "sort_by": {
+                            "type": "string",
+                            "enum": ["count_desc", "count_asc", "value"],
+                            "description": "Sort order: 'count_desc' (default), 'count_asc', or 'value' (alphabetical).",
+                            "default": "count_desc",
+                        },
+                    },
+                    "required": ["layer_name", "field_name"],
+                },
+            },
+        },
+    },
+
+    "get_statistics_by_group": {
+        "intents": ["analyse"],
+        "handler": "get_statistics_by_group",
+        "schema": {
+            "type": "function",
+            "function": {
+                "name": "get_statistics_by_group",
+                "description": (
+                    "Computes statistics (min, max, mean, sum, count) on a numeric field "
+                    "grouped by the unique values of another field. "
+                    "Use for 'average area per type', 'total population per municipality', "
+                    "'compare statistics between categories'."
+                ),
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "layer_name": {"type": "string"},
+                        "group_field": {
+                            "type": "string",
+                            "description": "Field used to form groups (categorical). Ex: 'type', 'municipality'.",
+                        },
+                        "value_field": {
+                            "type": "string",
+                            "description": "Numeric field to compute statistics on. Ex: 'area', 'population'.",
+                        },
+                    },
+                    "required": ["layer_name", "group_field", "value_field"],
+                },
+            },
+        },
+    },
+
+    "get_field_percentiles": {
+        "intents": ["analyse"],
+        "handler": "get_field_percentiles",
+        "schema": {
+            "type": "function",
+            "function": {
+                "name": "get_field_percentiles",
+                "description": (
+                    "Computes percentiles for a numeric field: median (P50), Q1 (P25), Q3 (P75), "
+                    "IQR, and any custom percentile. "
+                    "Use for 'what is the median', 'interquartile range', 'give me the 90th percentile'."
+                ),
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "layer_name": {"type": "string"},
+                        "field_name": {
+                            "type": "string",
+                            "description": "Numeric field to compute percentiles on.",
+                        },
+                        "custom_percentile": {
+                            "type": "number",
+                            "description": "Additional percentile to compute (0–100). Ex: 90 for P90. Optional.",
+                        },
+                    },
+                    "required": ["layer_name", "field_name"],
+                },
+            },
+        },
+    },
+
+    "get_field_correlation": {
+        "intents": ["analyse"],
+        "handler": "get_field_correlation",
+        "schema": {
+            "type": "function",
+            "function": {
+                "name": "get_field_correlation",
+                "description": (
+                    "Computes the Pearson correlation coefficient between two numeric fields. "
+                    "Returns r (−1 to 1) and the number of valid feature pairs. "
+                    "Use for 'is X correlated with Y', 'relationship between area and population'."
+                ),
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "layer_name": {"type": "string"},
+                        "field_a": {
+                            "type": "string",
+                            "description": "First numeric field.",
+                        },
+                        "field_b": {
+                            "type": "string",
+                            "description": "Second numeric field.",
+                        },
+                    },
+                    "required": ["layer_name", "field_a", "field_b"],
+                },
+            },
+        },
+    },
 
     "calculate_geometry": {
         "intents": ["analyse", "edit"],
