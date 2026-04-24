@@ -63,7 +63,7 @@ REGISTRY = {
     },
 
     "get_layer_fields": {
-        "intents": ["read"],
+        "intents": ["read", "label", "field", "style", "select", "stats"],
         "handler": "get_layer_fields",
         "schema": {
             "type": "function",
