@@ -158,11 +158,28 @@ Show me the 5 largest features in the buildings layer.
 
 Switch to **Agent** mode in the panel. Describe your task in plain language — the agent will:
 
-1. Classify the intent using a lightweight LLM pre-call (14 intent categories: `chat`, `read`, `stats`, `process`, `join`, `select`, `style`, `symbol`, `label`, `field`, `layer`, `export`, `view`, `raster`)
+1. Classify the intent using a lightweight LLM pre-call (14 intent categories below)
 2. Select only the relevant tools for those intents (max ~10 tools per call)
 3. Call them iteratively, passing results between steps
 4. Capture the map canvas after visual changes
 5. Synthesize a final answer
+
+| Intent | Description |
+|---|---|
+| `chat` | General conversation, GIS questions, explanations — no specific QGIS operation needed |
+| `read` | Inspect layers, list fields, browse features, get layer extent or CRS |
+| `stats` | Compute statistics — min/max/mean, frequency tables, percentiles, correlation, geometry validity |
+| `process` | Geometry operations producing a new layer (buffer, clip, dissolve, intersection, difference, union, reproject, centroids, fix geometries) |
+| `join` | Combine data from multiple layers (spatial join, attribute join, count points in polygon, merge layers) |
+| `select` | Select or filter features (by expression, by location, extract to new layer, set filter, clear/invert selection) |
+| `style` | Set layer renderer / classification (single symbol, categorized, graduated, proportional, rule-based) |
+| `symbol` | Adjust symbol appearance (marker shape, size, stroke, opacity, blending mode) |
+| `label` | Add, remove or configure labels (text, font, buffer, placement, expression, shadow, background) |
+| `field` | Add, delete, rename or calculate a field; calculate geometry attributes |
+| `layer` | Load, remove or rename a layer in the project |
+| `export` | Export or save a layer to a file |
+| `view` | Zoom, navigate the map, show/hide layers, set scale visibility |
+| `raster` | Raster-specific operations (info, statistics, pseudocolor/grayscale style) |
 
 Pure conversational requests (`chat` intent) skip the project snapshot injection entirely to avoid unnecessary token usage.
 
