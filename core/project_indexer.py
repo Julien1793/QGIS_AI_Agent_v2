@@ -39,7 +39,7 @@ def _layer_basics(layer):
         "source": src,
     }
 
-def _vector_meta(vl: QgsVectorLayer, sample_fields_max=50):
+def _vector_meta(vl: QgsVectorLayer):
     md = _layer_basics(vl)
     # Geometry type -- wrapped in try/except because WKB access can fail on some layer types.
     try:
@@ -55,21 +55,6 @@ def _vector_meta(vl: QgsVectorLayer, sample_fields_max=50):
         md["isMultipart"] = None
         md["hasZ"] = None
         md["hasM"] = None
-
-    # Collect field names and types, up to sample_fields_max.
-    fields = []
-    try:
-        # Use indexed iteration instead of slicing for QGIS 3.x compatibility.
-        for i, f in enumerate(vl.fields()):
-            if i >= int(sample_fields_max):
-                break
-            fields.append({
-                "name": f.name(),
-                "type": f.typeName() or str(f.type())  # fall back to raw type enum if typeName() is empty
-            })
-    except Exception:
-        pass
-    md["fields"] = fields
 
     # featureCount can be slow on very large datasets but is acceptable for snapshot purposes.
     try:
@@ -89,10 +74,11 @@ def _raster_meta(rl: QgsRasterLayer):
         pass
     return md
 
-def build_project_snapshot(sample_fields_max=50):
+def build_project_snapshot():
     """
     Return a lightweight project snapshot dict containing layers, layer-tree groups,
     and project custom variables. Used as LLM context for agent requests.
+    Fields are intentionally excluded — use get_layer_fields tool to retrieve them on demand.
     """
     prj = QgsProject.instance()
     snapshot = {
@@ -110,7 +96,7 @@ def build_project_snapshot(sample_fields_max=50):
     # Iterate over all loaded layers and collect type-specific metadata.
     for layer in prj.mapLayers().values():
         if isinstance(layer, QgsVectorLayer):
-            snapshot["layers"].append(_vector_meta(layer, sample_fields_max))
+            snapshot["layers"].append(_vector_meta(layer))
         elif isinstance(layer, QgsRasterLayer):
             snapshot["layers"].append(_raster_meta(layer))
         elif isinstance(layer, QgsMapLayer):
