@@ -81,18 +81,22 @@ class AgentLoop:
                    data={"intents": intents, "tools": tool_names})
 
         # 5 — Build the initial message list (system prompt + history + current user message).
+        # For pure chat, skip the project snapshot to avoid sending thousands of tokens
+        # for a request that doesn't need GIS context.
+        is_chat_only = intents == ["chat"]
         history = [m for m in (history_messages or [])
                    if m.get("role") in ("user", "assistant")]
+        if is_chat_only or not snapshot_json:
+            user_content = user_prompt
+        else:
+            user_content = (
+                f"{t['project_snapshot_intro']}\n```json\n{snapshot_json}\n```\n\n"
+                f"{user_prompt}"
+            )
         messages = [
             {"role": "system", "content": t["agent_system_prompt"]},
             *history,
-            {
-                "role": "user",
-                "content": (
-                    f"{t['project_snapshot_intro']}\n```json\n{snapshot_json}\n```\n\n"
-                    f"{user_prompt}"
-                ),
-            },
+            {"role": "user", "content": user_content},
         ]
 
         # 6 — Agentic loop: LLM call → tool execution → tool result → next LLM call.
