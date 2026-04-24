@@ -254,8 +254,13 @@ class AgentLoop:
                 intents = parsed.get("intents", [])
                 if isinstance(intents, list) and intents:
                     # Keep only known intent values; discard anything unrecognised.
-                    valid = {"read", "process", "select", "style",
-                             "edit", "export", "analyse", "view", "chat"}
+                    valid = {
+                        "chat", "read", "stats",
+                        "process", "join", "select",
+                        "style", "symbol", "label",
+                        "field", "layer", "export",
+                        "view", "raster",
+                    }
                     filtered = [i for i in intents if i in valid]
                     if filtered:
                         return filtered

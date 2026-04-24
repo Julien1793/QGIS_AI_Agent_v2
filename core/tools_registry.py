@@ -120,7 +120,7 @@ REGISTRY = {
     },
 
     "get_layer_statistics": {
-        "intents": ["read", "analyse"],
+        "intents": ["stats"],
         "handler": "get_layer_statistics",
         "schema": {
             "type": "function",
@@ -370,7 +370,7 @@ REGISTRY = {
     },
 
     "join_by_location": {
-        "intents": ["process", "analyse"],
+        "intents": ["join"],
         "handler": "join_by_location",
         "schema": {
             "type": "function",
@@ -518,7 +518,7 @@ REGISTRY = {
     },
 
     "extract_by_expression": {
-        "intents": ["process", "select"],
+        "intents": ["select"],
         "handler": "extract_by_expression",
         "schema": {
             "type": "function",
@@ -547,7 +547,7 @@ REGISTRY = {
     },
 
     "extract_by_location": {
-        "intents": ["process", "select"],
+        "intents": ["select"],
         "handler": "extract_by_location",
         "schema": {
             "type": "function",
@@ -584,7 +584,7 @@ REGISTRY = {
     },
 
     "merge_layers": {
-        "intents": ["process", "edit"],
+        "intents": ["join"],
         "handler": "merge_layers",
         "schema": {
             "type": "function",
@@ -613,7 +613,7 @@ REGISTRY = {
     },
 
     "join_by_field": {
-        "intents": ["process", "analyse"],
+        "intents": ["join"],
         "handler": "join_by_field",
         "schema": {
             "type": "function",
@@ -669,7 +669,7 @@ REGISTRY = {
     },
 
     "count_points_in_polygon": {
-        "intents": ["process", "analyse"],
+        "intents": ["join"],
         "handler": "count_points_in_polygon",
         "schema": {
             "type": "function",
@@ -771,7 +771,7 @@ REGISTRY = {
     },
 
     "select_by_location": {
-        "intents": ["select", "process"],
+        "intents": ["select"],
         "handler": "select_by_location",
         "schema": {
             "type": "function",
@@ -879,7 +879,7 @@ REGISTRY = {
     },
 
     "zoom_to_layer": {
-        "intents": ["select", "view"],
+        "intents": ["view"],
         "handler": "zoom_to_layer",
         "schema": {
             "type": "function",
@@ -898,7 +898,7 @@ REGISTRY = {
     },
 
     "zoom_to_feature": {
-        "intents": ["select", "view"],
+        "intents": ["view"],
         "handler": "zoom_to_feature",
         "schema": {
             "type": "function",
@@ -1133,7 +1133,7 @@ REGISTRY = {
     },
 
     "set_symbol_properties": {
-        "intents": ["style"],
+        "intents": ["symbol"],
         "handler": "set_symbol_properties",
         "schema": {
             "type": "function",
@@ -1186,7 +1186,7 @@ REGISTRY = {
     },
 
     "set_marker_shape": {
-        "intents": ["style"],
+        "intents": ["symbol"],
         "handler": "set_marker_shape",
         "schema": {
             "type": "function",
@@ -1311,7 +1311,7 @@ REGISTRY = {
     },
 
     "set_layer_opacity": {
-        "intents": ["style"],
+        "intents": ["symbol"],
         "handler": "set_layer_opacity",
         "schema": {
             "type": "function",
@@ -1334,7 +1334,7 @@ REGISTRY = {
     },
 
     "set_layer_blending_mode": {
-        "intents": ["style"],
+        "intents": ["symbol"],
         "handler": "set_layer_blending_mode",
         "schema": {
             "type": "function",
@@ -1370,7 +1370,7 @@ REGISTRY = {
     },
 
     "set_scale_based_visibility": {
-        "intents": ["style", "view"],
+        "intents": ["view"],
         "handler": "set_scale_based_visibility",
         "schema": {
             "type": "function",
@@ -1404,7 +1404,7 @@ REGISTRY = {
     },
 
     "set_layer_visibility": {
-        "intents": ["style", "view"],
+        "intents": ["view"],
         "handler": "set_layer_visibility",
         "schema": {
             "type": "function",
@@ -1428,7 +1428,7 @@ REGISTRY = {
     # ══════════════════════════════════════════════════════════
 
     "get_label_settings": {
-        "intents": ["style"],
+        "intents": ["label"],
         "handler": "get_label_settings",
         "schema": {
             "type": "function",
@@ -1451,7 +1451,7 @@ REGISTRY = {
     },
 
     "enable_labels": {
-        "intents": ["style"],
+        "intents": ["label"],
         "handler": "enable_labels",
         "schema": {
             "type": "function",
@@ -1511,7 +1511,7 @@ REGISTRY = {
     },
 
     "disable_labels": {
-        "intents": ["style"],
+        "intents": ["label"],
         "handler": "disable_labels",
         "schema": {
             "type": "function",
@@ -1530,7 +1530,7 @@ REGISTRY = {
     },
 
     "set_label_text_format": {
-        "intents": ["style"],
+        "intents": ["label"],
         "handler": "set_label_text_format",
         "schema": {
             "type": "function",
@@ -1572,7 +1572,7 @@ REGISTRY = {
     },
 
     "set_label_buffer": {
-        "intents": ["style"],
+        "intents": ["label"],
         "handler": "set_label_buffer",
         "schema": {
             "type": "function",
@@ -1616,7 +1616,7 @@ REGISTRY = {
     },
 
     "set_label_placement": {
-        "intents": ["style"],
+        "intents": ["label"],
         "handler": "set_label_placement",
         "schema": {
             "type": "function",
@@ -1688,7 +1688,7 @@ REGISTRY = {
     },
 
     "set_label_expression": {
-        "intents": ["style"],
+        "intents": ["label"],
         "handler": "set_label_expression",
         "schema": {
             "type": "function",
@@ -1717,7 +1717,7 @@ REGISTRY = {
     },
 
     "set_label_shadow": {
-        "intents": ["style"],
+        "intents": ["label"],
         "handler": "set_label_shadow",
         "schema": {
             "type": "function",
@@ -1770,7 +1770,7 @@ REGISTRY = {
     },
 
     "set_label_background": {
-        "intents": ["style"],
+        "intents": ["label"],
         "handler": "set_label_background",
         "schema": {
             "type": "function",
@@ -1834,7 +1834,7 @@ REGISTRY = {
     },
 
     "set_label_callout": {
-        "intents": ["style"],
+        "intents": ["label"],
         "handler": "set_label_callout",
         "schema": {
             "type": "function",
@@ -1885,7 +1885,7 @@ REGISTRY = {
     },
 
     "refresh_canvas": {
-        "intents": ["style", "view"],
+        "intents": ["view"],
         "handler": "refresh_canvas",
         "schema": {
             "type": "function",
@@ -1906,7 +1906,7 @@ REGISTRY = {
     # ══════════════════════════════════════════════════════════
 
     "add_field": {
-        "intents": ["edit"],
+        "intents": ["field"],
         "handler": "add_field",
         "schema": {
             "type": "function",
@@ -1940,7 +1940,7 @@ REGISTRY = {
     },
 
     "delete_field": {
-        "intents": ["edit"],
+        "intents": ["field"],
         "handler": "delete_field",
         "schema": {
             "type": "function",
@@ -1967,7 +1967,7 @@ REGISTRY = {
     },
 
     "rename_field": {
-        "intents": ["edit"],
+        "intents": ["field"],
         "handler": "rename_field",
         "schema": {
             "type": "function",
@@ -1997,7 +1997,7 @@ REGISTRY = {
     },
 
     "rename_layer": {
-        "intents": ["edit"],
+        "intents": ["layer"],
         "handler": "rename_layer",
         "schema": {
             "type": "function",
@@ -2026,7 +2026,7 @@ REGISTRY = {
     },
 
     "remove_layer": {
-        "intents": ["edit"],
+        "intents": ["layer"],
         "handler": "remove_layer",
         "schema": {
             "type": "function",
@@ -2049,7 +2049,7 @@ REGISTRY = {
     },
 
     "calculate_field": {
-        "intents": ["edit", "analyse"],
+        "intents": ["field"],
         "handler": "calculate_field",
         "schema": {
             "type": "function",
@@ -2086,7 +2086,7 @@ REGISTRY = {
     },
 
     "load_layer": {
-        "intents": ["edit", "read"],
+        "intents": ["layer"],
         "handler": "load_layer",
         "schema": {
             "type": "function",
@@ -2181,7 +2181,7 @@ REGISTRY = {
     },
 
     "get_raster_statistics": {
-        "intents": ["raster", "read", "analyse"],
+        "intents": ["raster", "stats"],
         "handler": "get_raster_statistics",
         "schema": {
             "type": "function",
@@ -2209,7 +2209,7 @@ REGISTRY = {
     },
 
     "set_raster_style": {
-        "intents": ["raster", "style"],
+        "intents": ["raster", "symbol"],
         "handler": "set_raster_style",
         "schema": {
             "type": "function",
@@ -2268,7 +2268,7 @@ REGISTRY = {
     # ══════════════════════════════════════════════════════════
 
     "get_field_value_counts": {
-        "intents": ["read", "analyse"],
+        "intents": ["stats"],
         "handler": "get_field_value_counts",
         "schema": {
             "type": "function",
@@ -2302,7 +2302,7 @@ REGISTRY = {
     },
 
     "get_statistics_by_group": {
-        "intents": ["analyse"],
+        "intents": ["stats"],
         "handler": "get_statistics_by_group",
         "schema": {
             "type": "function",
@@ -2334,7 +2334,7 @@ REGISTRY = {
     },
 
     "get_field_percentiles": {
-        "intents": ["analyse"],
+        "intents": ["stats"],
         "handler": "get_field_percentiles",
         "schema": {
             "type": "function",
@@ -2365,7 +2365,7 @@ REGISTRY = {
     },
 
     "get_field_correlation": {
-        "intents": ["analyse"],
+        "intents": ["stats"],
         "handler": "get_field_correlation",
         "schema": {
             "type": "function",
@@ -2396,7 +2396,7 @@ REGISTRY = {
     },
 
     "calculate_geometry": {
-        "intents": ["analyse", "edit"],
+        "intents": ["field"],
         "handler": "calculate_geometry",
         "schema": {
             "type": "function",
@@ -2420,7 +2420,7 @@ REGISTRY = {
     },
 
     "check_geometry_validity": {
-        "intents": ["analyse"],
+        "intents": ["stats"],
         "handler": "check_geometry_validity",
         "schema": {
             "type": "function",
@@ -2456,7 +2456,8 @@ REGISTRY = {
                 "description": (
                     "Requests access to additional tools if you realise mid-execution "
                     "that the available tools do not cover all needs. "
-                    "Specify the missing intents from: read, process, select, style, edit, export, analyse, view. "
+                    "Specify the missing intents from: read, stats, process, join, select, "
+                    "style, symbol, label, field, layer, export, view, raster. "
                     "New tools will be immediately available for subsequent calls."
                 ),
                 "parameters": {
@@ -2465,7 +2466,7 @@ REGISTRY = {
                         "intents": {
                             "type": "array",
                             "items": {"type": "string"},
-                            "description": "List of intents needed, e.g. [\"style\", \"edit\"].",
+                            "description": "List of intents needed, e.g. [\"style\", \"label\"].",
                         },
                         "reason": {
                             "type": "string",
