@@ -115,6 +115,10 @@ def get_translations(lang):
             "agent_label_tool_result": "Résultat",
             "agent_label_final": "Réponse",
 
+            # Jauge contexte
+            "context_usage_label": "Contexte",
+            "agent_context_warning": "⚠ Fenêtre de contexte presque pleine ({used} / {max} tokens)",
+            "agent_context_overflow": "⛔ Fenêtre de contexte saturée ({used} / {max} tokens) — la réponse risque d'être tronquée",
 
             # Options
             "language": "Langue de réponse :",
@@ -358,6 +362,11 @@ def get_translations(lang):
             "agent_label_tool_result": "Result",
             "agent_label_final": "Answer",
 
+            # Context gauge
+            "context_usage_label": "Context",
+            "agent_context_warning": "⚠ Context window filling up ({used} / {max} tokens)",
+            "agent_context_overflow": "⛔ Context window nearly full ({used} / {max} tokens) — response may be truncated",
+
             # Agent prompts
             "agent_system_prompt": (
                 "You are a QGIS expert agent embedded in the QGIS AI Agent plugin. "
@@ -388,6 +397,9 @@ def get_translations(lang):
             "agent_intent_user": (
                 "Classify this QGIS request as JSON.\n\n"
                 "Available intents (you can pick several):\n"
+                "- \"chat\"    : general conversation, GIS questions, explanations, advice, or anything that does not require a specific QGIS operation. "
+                "The agent can still capture the map canvas (to see what is displayed) or run custom PyQGIS code if directly relevant, "
+                "but the primary mode is discussion — use this when no other intent fits.\n"
                 "- \"read\"    : read data, show info, statistics, field values\n"
                 "- \"process\" : spatial geoprocessing (buffer, clip, dissolve, intersection, reprojection, spatial join)\n"
                 "- \"select\"  : select or filter features (by expression or location)\n"

@@ -357,6 +357,8 @@ class MainDock(QDockWidget):
         )
 
         self.total_tokens_used = 0
+        self.last_prompt_tokens = 0
+        self.last_context_max = 0
         self.current_mode = self.settings_manager.get("mode", "local")
         self.current_model = self.settings_manager.get("model", "")
 
@@ -839,6 +841,14 @@ class MainDock(QDockWidget):
                 self._process_recorder.on_step(event)
             except Exception:
                 pass
+
+            # Context gauge: update status bar silently, never render in the steps block.
+            if event.get("type") == "context_usage":
+                data = event.get("data", {})
+                self.last_prompt_tokens = data.get("prompt_tokens", 0)
+                self.last_context_max = data.get("context_max", 0)
+                self.update_status_label()
+                return
 
             if not show_steps:
                 return
@@ -1679,6 +1689,8 @@ class MainDock(QDockWidget):
         self.conversation_view.clear()
         self.conversation_manager.clear()
         self.total_tokens_used = 0
+        self.last_prompt_tokens = 0
+        self.last_context_max = 0
         self.settings_manager.set("token_total_since_clear", 0)
         self.update_status_label()
         self._reset_project_context()
@@ -1726,6 +1738,7 @@ class MainDock(QDockWidget):
             self.history_turns = int(self.settings_manager.get("history_turns", 0))
             if hasattr(self, "refresh_chat_highlight"):
                 self.refresh_chat_highlight()
+            self.last_context_max = self.settings_manager.get_project_context_max_tokens()
             self.update_status_label()
 
             self.setWindowTitle(self.t["dock_title"])
@@ -1765,10 +1778,26 @@ class MainDock(QDockWidget):
         _mode_key = "mode_remote" if self.settings_manager.get("mode", "local") == "distant" else "mode_local"
         mode = self.t.get(_mode_key, self.settings_manager.get("mode", "local").capitalize())
         model = self.settings_manager.get("model", None) or self.settings_manager.get("model_name", "N/A")
+
+        ctx_part = ""
+        prompt_tok = self.last_prompt_tokens
+        ctx_max = self.last_context_max
+        if prompt_tok and ctx_max:
+            pct = min(int(prompt_tok / ctx_max * 100), 100)
+            filled = min(pct // 10, 10)
+            bar = "█" * filled + "░" * (10 - filled)
+            color = "#e74c3c" if pct >= 90 else "#f39c12" if pct >= 75 else "#2ecc71"
+            ctx_label = self.t.get("context_usage_label", "Context")
+            ctx_part = (
+                f" | <b>{ctx_label} :</b> "
+                f"<span style='color:{color}'>{bar} {prompt_tok:,}&nbsp;/&nbsp;{ctx_max:,}</span>"
+            )
+
         self.status_label.setText(
             f"<b>{self.t['mode']} :</b> {mode} | "
             f"<b>{self.t['model']} :</b> {model} | "
             f"<b>{self.t['token_count']} :</b> {self.total_tokens_used}"
+            + ctx_part
         )
 
     @staticmethod

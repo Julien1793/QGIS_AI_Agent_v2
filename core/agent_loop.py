@@ -105,8 +105,21 @@ class AgentLoop:
                            t["agent_step_iteration"].format(
                                current=iteration + 1, max=max_iter))
 
-            response, usage = self._llm_call(messages, tools)
+            response, usage, prompt_tokens = self._llm_call(messages, tools)
             total_tokens += usage
+
+            # Emit context gauge update and warn if approaching the input token limit.
+            ctx_max = self.settings.get_project_context_max_tokens()
+            self._emit(on_step, "context_usage", "",
+                       data={"prompt_tokens": prompt_tokens, "context_max": ctx_max})
+            if ctx_max > 0 and prompt_tokens > 0:
+                ratio = prompt_tokens / ctx_max
+                if ratio >= 0.90:
+                    self._emit(on_step, "context_warning",
+                               t["agent_context_overflow"].format(used=prompt_tokens, max=ctx_max))
+                elif ratio >= 0.75:
+                    self._emit(on_step, "context_warning",
+                               t["agent_context_warning"].format(used=prompt_tokens, max=ctx_max))
 
             # LLM call failed — emit an error event and abort the loop.
             if response is None:
@@ -242,7 +255,7 @@ class AgentLoop:
                 if isinstance(intents, list) and intents:
                     # Keep only known intent values; discard anything unrecognised.
                     valid = {"read", "process", "select", "style",
-                             "edit", "export", "analyse", "view"}
+                             "edit", "export", "analyse", "view", "chat"}
                     filtered = [i for i in intents if i in valid]
                     if filtered:
                         return filtered
@@ -264,7 +277,7 @@ class AgentLoop:
             except Exception:
                 pass
 
-        return ["read", "process", "style"]
+        return ["chat"]
 
     # ══════════════════════════════════════════════════════════
     # Appel LLM principal (avec tools)
@@ -305,6 +318,7 @@ class AgentLoop:
 
             usage = data.get("usage", {})
             tokens = usage.get("total_tokens", 0) if isinstance(usage, dict) else 0
+            prompt_tokens = usage.get("prompt_tokens", 0) if isinstance(usage, dict) else 0
 
             choice = data["choices"][0]
             msg = choice["message"]
@@ -324,10 +338,10 @@ class AgentLoop:
                         },
                     })
 
-            return response, tokens
+            return response, tokens, prompt_tokens
 
         except Exception:
-            return None, 0
+            return None, 0, 0
 
     # ══════════════════════════════════════════════════════════
     # Expansion dynamique des tools mid-loop
