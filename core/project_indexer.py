@@ -115,4 +115,5 @@ def snapshot_to_json(snapshot: dict, max_bytes: int = 100*1024) -> str:
             if not txt.endswith("\n"):
                 txt += "\n"
             txt += "... (truncated)"
+    print(f"[project_indexer] snapshot ({len(txt)} chars):\n{txt}")
     return txt
