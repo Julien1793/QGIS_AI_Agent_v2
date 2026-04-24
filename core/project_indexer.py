@@ -1,6 +1,6 @@
 import json
 from qgis.core import (
-    QgsProject, QgsMapLayer, QgsVectorLayer, QgsRasterLayer, QgsMessageLog
+    QgsProject, QgsMapLayer, QgsVectorLayer, QgsRasterLayer
 )
 
 def _safe_int(x, default=0):
@@ -115,5 +115,4 @@ def snapshot_to_json(snapshot: dict, max_bytes: int = 100*1024) -> str:
             if not txt.endswith("\n"):
                 txt += "\n"
             txt += "... (truncated)"
-    QgsMessageLog.logMessage(f"snapshot ({len(txt)} chars):\n{txt}", "AI Agent", level=0)
     return txt
