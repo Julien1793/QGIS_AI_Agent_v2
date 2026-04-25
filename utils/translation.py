@@ -80,12 +80,13 @@ def get_translations(lang):
             "agent_step_intent_detected": "Intentions détectées : {intents}",
             "agent_step_tools_selected": "{count} outils sélectionnés : {names}",
             "agent_step_tool_calling": "Appel de {tool}...",
-            "agent_step_tool_success": "✓ {summary}",
-            "agent_step_tool_error": "✗ Erreur : {error}",
+            "agent_step_tool_success": "{summary}",
+            "agent_step_tool_error": "Erreur : {error}",
             "agent_step_iteration": "Étape limite {current}/{max}",
             "agent_step_final": "Synthèse de la réponse...",
             "agent_step_max_iterations": "Nombre maximum d'itérations atteint ({max}). Opération incomplète.",
             "agent_no_new_tools":"aucun nouveau",
+            "agent_summary_label": "Résumé de l'IA",
 
             # Résumés de tool_result
             "agent_result_layer_created": "Couche '{name}' créée ({count} features)",
@@ -326,12 +327,13 @@ def get_translations(lang):
             "agent_step_intent_detected": "Detected intents: {intents}",
             "agent_step_tools_selected": "{count} tools selected: {names}",
             "agent_step_tool_calling": "Calling {tool}...",
-            "agent_step_tool_success": "✓ {summary}",
-            "agent_step_tool_error": "✗ Error: {error}",
+            "agent_step_tool_success": "{summary}",
+            "agent_step_tool_error": "Error: {error}",
             "agent_step_iteration": "Limit step {current}/{max}",
             "agent_step_final": "Finalizing response...",
             "agent_step_max_iterations": "Maximum iterations reached ({max}). Operation incomplete.",
             "agent_no_new_tools":"no new tools",
+            "agent_summary_label": "AI Summary",
 
             # Tool result summaries
             "agent_result_layer_created": "Layer '{name}' created ({count} features)",
@@ -386,13 +388,15 @@ def get_translations(lang):
                 "WRONG: `for f in layer.getFeatures(): print(f['name'])` "
                 "RIGHT: `names = [f['name'] for f in layer.getFeatures()]; print(f'{len(names)} features: {names[:5]}')`\n"
                 "- Never call iface.messageBar() inside run_pyqgis_code: the agent loop handles user communication.\n"
+                "- Always reply in the same language the user is writing in.\n"
+                "- When all operations are done, give a concise summary of what was done."
+            ),
+            "agent_system_prompt_canvas_rules": (
                 "- After applying any style, symbology, labels, or visual change to a layer, "
                 "ALWAYS call capture_map_canvas to visually verify the result before responding to the user.\n"
                 "- If the user asks about what is displayed on the map, their current location, what they see, "
                 "or the visual state of the project, call capture_map_canvas FIRST before responding — "
-                "never ask the user to send a screenshot themselves.\n"
-                "- Always reply in the same language the user is writing in.\n"
-                "- When all operations are done, give a concise summary of what was done."
+                "never ask the user to send a screenshot themselves."
             ),
             "agent_intent_system": (
                 "You are an intent classifier for a QGIS assistant. "

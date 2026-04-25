@@ -888,6 +888,14 @@ class MainDock(QDockWidget):
                 if total_tokens else ""
             )
 
+            if show_steps and renderer.events:
+                summary_label = self.t.get("agent_summary_label", "AI Summary")
+                safe_body = (
+                    f'<p style="font-size:12px;color:#7a9abf;font-weight:bold;'
+                    f'margin-top:0;margin-bottom:4px;text-align:center;">'
+                    f'{html.escape(summary_label)}</p>'
+                ) + safe_body
+
             final_bubble = wrap_assistant(
                 body_html=safe_body,
                 label=self.t.get("assistant_prefix", "Assistant"),

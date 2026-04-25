@@ -1,7 +1,8 @@
 import os
 from qgis.PyQt.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit,
-    QPushButton, QComboBox, QMessageBox, QSpinBox, QCheckBox, QFileDialog
+    QPushButton, QComboBox, QMessageBox, QSpinBox, QCheckBox, QFileDialog,
+    QTabWidget, QGroupBox, QWidget
 )
 from qgis.PyQt.QtCore import pyqtSignal
 import requests
@@ -14,7 +15,6 @@ class OptionsDialog(QDialog):
         super().__init__()
         self.settings = settings_manager
 
-        # Language and translations
         self.lang = self.settings.get_language()
         if self.lang not in ["fr", "en"]:
             self.lang = "fr"
@@ -23,7 +23,14 @@ class OptionsDialog(QDialog):
         self.layout = QVBoxLayout()
         self.setLayout(self.layout)
 
-        # --- Connection mode (local / remote) ---
+        self.tab_widget = QTabWidget()
+        self.layout.addWidget(self.tab_widget)
+
+        # ── Tab 1 : Connexion ─────────────────────────────────────────────
+        tab_conn = QWidget()
+        tab_conn_layout = QVBoxLayout()
+        tab_conn.setLayout(tab_conn_layout)
+
         self.mode_layout = QHBoxLayout()
         self.mode_label = QLabel()
         self.mode_combo = QComboBox()
@@ -35,40 +42,92 @@ class OptionsDialog(QDialog):
         self.mode_combo.currentIndexChanged.connect(self.update_visibility)
         self.mode_layout.addWidget(self.mode_label)
         self.mode_layout.addWidget(self.mode_combo)
-        self.layout.addLayout(self.mode_layout)
+        tab_conn_layout.addLayout(self.mode_layout)
 
-        # --- Interface language ---
-        self.lang_layout = QHBoxLayout()
-        self.lang_label = QLabel()
-        self.lang_combo = QComboBox()
-        self.lang_combo.addItems(["French", "English"])
-        self.lang_combo.setCurrentText("French" if self.lang == "fr" else "English")
-        self.lang_combo.currentTextChanged.connect(self.change_language)
-        self.lang_layout.addWidget(self.lang_label)
-        self.lang_layout.addWidget(self.lang_combo)
-        self.layout.addLayout(self.lang_layout)
+        self.url_layout = QHBoxLayout()
+        self.url_label = QLabel()
+        self.url_input = QLineEdit()
+        self.url_input.setPlaceholderText("http://localhost:1234/v1/chat/completions")
+        self.url_input.setText(self.settings.get_api_url())
+        self.url_layout.addWidget(self.url_label)
+        self.url_layout.addWidget(self.url_input)
+        tab_conn_layout.addLayout(self.url_layout)
 
-        # --- Conversation history depth ---
-        self.history_layout = QHBoxLayout()
-        self.history_label = QLabel()
-        self.history_spin = QSpinBox()
-        self.history_spin.setRange(0, 50)  # 0 = no history sent to the API
-        self.history_spin.setValue(int(self.settings.get("history_turns", 0)))
-        self.history_layout.addWidget(self.history_label)
-        self.history_layout.addWidget(self.history_spin)
-        self.layout.addLayout(self.history_layout)
+        self.model_layout = QHBoxLayout()
+        self.model_label = QLabel()
+        self.model_input = QLineEdit()
+        self.model_input.setPlaceholderText("mistral, llama3, gpt-4...")
+        self.model_input.setText(self.settings.get_model())
+        self.model_layout.addWidget(self.model_label)
+        self.model_layout.addWidget(self.model_input)
+        tab_conn_layout.addLayout(self.model_layout)
 
-        # --- SSE streaming mode ---
+        self.key_layout = QHBoxLayout()
+        self.key_label = QLabel()
+        self.api_key_input = QLineEdit()
+        self.api_key_input.setEchoMode(QLineEdit.Password)
+        self.api_key_input.setPlaceholderText("sk-...")
+        self.api_key_input.setText(self.settings.get_api_key())
+        self.key_layout.addWidget(self.key_label)
+        self.key_layout.addWidget(self.api_key_input)
+        tab_conn_layout.addLayout(self.key_layout)
+
+        test_btn_row = QHBoxLayout()
+        self.btn_test = QPushButton()
+        test_btn_row.addStretch()
+        test_btn_row.addWidget(self.btn_test)
+        tab_conn_layout.addLayout(test_btn_row)
+
+        self.ca_group = QGroupBox()
+        ca_group_layout = QVBoxLayout()
+        self.chk_windows_ca = QCheckBox()
+        self.chk_windows_ca.setChecked(self.settings.get_use_windows_ca_bundle())
+        self.chk_windows_ca.toggled.connect(self.update_visibility)
+        ca_group_layout.addWidget(self.chk_windows_ca)
+        self.ca_encoding_layout = QHBoxLayout()
+        self.ca_encoding_label = QLabel()
+        self.ca_encoding_input = QLineEdit()
+        self.ca_encoding_input.setText(self.settings.get_ca_bundle_cert_encoding())
+        self.ca_encoding_layout.addWidget(self.ca_encoding_label)
+        self.ca_encoding_layout.addWidget(self.ca_encoding_input)
+        ca_group_layout.addLayout(self.ca_encoding_layout)
+        self.ca_group.setLayout(ca_group_layout)
+        tab_conn_layout.addWidget(self.ca_group)
+
+        tab_conn_layout.addStretch()
+        self.tab_widget.addTab(tab_conn, "")
+
+        # ── Tab 2 : LLM ───────────────────────────────────────────────────
+        tab_llm = QWidget()
+        tab_llm_layout = QVBoxLayout()
+        tab_llm.setLayout(tab_llm_layout)
+
         self.chk_stream = QCheckBox()
         try:
             self.chk_stream.setChecked(self.settings.get_streaming_enabled())
         except Exception:
             self.chk_stream.setChecked(False)
-        self.layout.addWidget(self.chk_stream)
+        tab_llm_layout.addWidget(self.chk_stream)
 
+        self.history_layout = QHBoxLayout()
+        self.history_label = QLabel()
+        self.history_spin = QSpinBox()
+        self.history_spin.setRange(0, 50)
+        self.history_spin.setValue(int(self.settings.get("history_turns", 0)))
+        self.history_layout.addWidget(self.history_label)
+        self.history_layout.addWidget(self.history_spin)
+        tab_llm_layout.addLayout(self.history_layout)
 
+        self.agent_tokens_layout = QHBoxLayout()
+        self.agent_tokens_label = QLabel()
+        self.agent_tokens_spin = QSpinBox()
+        self.agent_tokens_spin.setRange(512, 65536)
+        self.agent_tokens_spin.setSingleStep(512)
+        self.agent_tokens_spin.setValue(self.settings.get_agent_max_tokens())
+        self.agent_tokens_layout.addWidget(self.agent_tokens_label)
+        self.agent_tokens_layout.addWidget(self.agent_tokens_spin)
+        tab_llm_layout.addLayout(self.agent_tokens_layout)
 
-        # --- QGIS project context snapshot ---
         self.ctx_layout = QHBoxLayout()
         self.ctx_check = QCheckBox()
         self.ctx_check.setChecked(self.settings.get_include_project_context())
@@ -80,57 +139,63 @@ class OptionsDialog(QDialog):
         self.ctx_layout.addWidget(self.ctx_check)
         self.ctx_layout.addWidget(self.ctx_max_label)
         self.ctx_layout.addWidget(self.ctx_max_spin)
-        self.layout.addLayout(self.ctx_layout)
+        tab_llm_layout.addLayout(self.ctx_layout)
 
-        # --- Max output tokens (response) — grouped with context tokens ---
-        self.agent_tokens_layout = QHBoxLayout()
-        self.agent_tokens_label = QLabel()
-        self.agent_tokens_spin = QSpinBox()
-        self.agent_tokens_spin.setRange(512, 65536)
-        self.agent_tokens_spin.setSingleStep(512)
-        self.agent_tokens_spin.setValue(self.settings.get_agent_max_tokens())
-        self.agent_tokens_layout.addWidget(self.agent_tokens_label)
-        self.agent_tokens_layout.addWidget(self.agent_tokens_spin)
-        self.layout.addLayout(self.agent_tokens_layout)
+        tab_llm_layout.addStretch()
+        self.tab_widget.addTab(tab_llm, "")
 
+        # ── Tab 3 : Agent ─────────────────────────────────────────────────
+        tab_agent = QWidget()
+        tab_agent_layout = QVBoxLayout()
+        tab_agent.setLayout(tab_agent_layout)
 
-        # --- API endpoint URL ---
-        self.url_layout = QHBoxLayout()
-        self.url_label = QLabel()
-        self.url_input = QLineEdit()
-        self.url_input.setPlaceholderText("http://localhost:1234/v1/chat/completions")
-        self.url_input.setText(self.settings.get_api_url())
-        self.url_layout.addWidget(self.url_label)
-        self.url_layout.addWidget(self.url_input)
-        self.layout.addLayout(self.url_layout)
+        self.chk_agent_mode = QCheckBox()
+        self.chk_agent_mode.setChecked(self.settings.get_agent_mode_enabled())
+        tab_agent_layout.addWidget(self.chk_agent_mode)
 
-        # --- Model identifier ---
-        self.model_layout = QHBoxLayout()
-        self.model_label = QLabel()
-        self.model_input = QLineEdit()
-        self.model_input.setPlaceholderText("mistral, llama3, gpt-4...")
-        self.model_input.setText(self.settings.get_model())
-        self.model_layout.addWidget(self.model_label)
-        self.model_layout.addWidget(self.model_input)
-        self.layout.addLayout(self.model_layout)
+        self.agent_iter_layout = QHBoxLayout()
+        self.agent_iter_label = QLabel()
+        self.agent_iter_spin = QSpinBox()
+        self.agent_iter_spin.setRange(1, 20)
+        self.agent_iter_spin.setValue(self.settings.get_agent_max_iterations())
+        self.agent_iter_layout.addWidget(self.agent_iter_label)
+        self.agent_iter_layout.addWidget(self.agent_iter_spin)
+        tab_agent_layout.addLayout(self.agent_iter_layout)
 
-        # --- API key (remote mode only) ---
-        self.key_layout = QHBoxLayout()
-        self.key_label = QLabel()
-        self.api_key_input = QLineEdit()
-        self.api_key_input.setEchoMode(QLineEdit.Password)
-        self.api_key_input.setPlaceholderText("sk-...")
-        self.api_key_input.setText(self.settings.get_api_key())
-        self.key_layout.addWidget(self.key_label)
-        self.key_layout.addWidget(self.api_key_input)
-        self.layout.addLayout(self.key_layout)
+        self.chk_agent_show_steps = QCheckBox()
+        self.chk_agent_show_steps.setChecked(self.settings.get_agent_show_steps())
+        tab_agent_layout.addWidget(self.chk_agent_show_steps)
 
-        # --- Request/response trace export (debug) ---
+        self.chk_canvas_capture = QCheckBox()
+        self.chk_canvas_capture.setChecked(self.settings.get_canvas_capture_enabled())
+        tab_agent_layout.addWidget(self.chk_canvas_capture)
+
+        tab_agent_layout.addStretch()
+        self.tab_widget.addTab(tab_agent, "")
+
+        # ── Tab 4 : Interface ─────────────────────────────────────────────
+        tab_iface = QWidget()
+        tab_iface_layout = QVBoxLayout()
+        tab_iface.setLayout(tab_iface_layout)
+
+        self.lang_layout = QHBoxLayout()
+        self.lang_label = QLabel()
+        self.lang_combo = QComboBox()
+        self.lang_combo.addItems(["French", "English"])
+        self.lang_combo.setCurrentText("French" if self.lang == "fr" else "English")
+        self.lang_combo.currentTextChanged.connect(self.change_language)
+        self.lang_layout.addWidget(self.lang_label)
+        self.lang_layout.addWidget(self.lang_combo)
+        tab_iface_layout.addLayout(self.lang_layout)
+
+        self.verify_checkbox = QCheckBox()
+        self.verify_checkbox.setChecked(self.settings.get_verify_before_execute())
+        tab_iface_layout.addWidget(self.verify_checkbox)
+
         self.trace_checkbox = QCheckBox()
         self.trace_checkbox.setChecked(self.settings.get_export_traces())
-        self.layout.addWidget(self.trace_checkbox)
+        tab_iface_layout.addWidget(self.trace_checkbox)
 
-        # Export directory path selector
         self.trace_path_layout = QHBoxLayout()
         self.trace_path_label = QLabel()
         self.trace_path_edit = QLineEdit()
@@ -140,73 +205,30 @@ class OptionsDialog(QDialog):
         self.trace_path_layout.addWidget(self.trace_path_label)
         self.trace_path_layout.addWidget(self.trace_path_edit)
         self.trace_path_layout.addWidget(self.trace_path_browse)
-        self.layout.addLayout(self.trace_path_layout)
+        tab_iface_layout.addLayout(self.trace_path_layout)
 
+        tab_iface_layout.addStretch()
+        self.tab_widget.addTab(tab_iface, "")
 
-        # --- Code review dialog before execution ---
-        self.verify_checkbox = QCheckBox()
-        self.verify_checkbox.setChecked(self.settings.get_verify_before_execute())
-        self.layout.addWidget(self.verify_checkbox)
-
-        # --- Agent mode (function calling with native QGIS tools) ---
-        self.chk_agent_mode = QCheckBox()
-        self.chk_agent_mode.setChecked(self.settings.get_agent_mode_enabled())
-        self.layout.addWidget(self.chk_agent_mode)
-
-        self.agent_iter_layout = QHBoxLayout()
-        self.agent_iter_label = QLabel()
-        self.agent_iter_spin = QSpinBox()
-        self.agent_iter_spin.setRange(1, 20)
-        self.agent_iter_spin.setValue(self.settings.get_agent_max_iterations())
-        self.agent_iter_layout.addWidget(self.agent_iter_label)
-        self.agent_iter_layout.addWidget(self.agent_iter_spin)
-        self.layout.addLayout(self.agent_iter_layout)
-
-        self.chk_agent_show_steps = QCheckBox()
-        self.chk_agent_show_steps.setChecked(self.settings.get_agent_show_steps())
-        self.layout.addWidget(self.chk_agent_show_steps)
-
-        self.chk_canvas_capture = QCheckBox()
-        self.chk_canvas_capture.setChecked(self.settings.get_canvas_capture_enabled())
-        self.layout.addWidget(self.chk_canvas_capture)
-
-        # --- Windows CA bundle ---
-        self.chk_windows_ca = QCheckBox()
-        self.chk_windows_ca.setChecked(self.settings.get_use_windows_ca_bundle())
-        self.chk_windows_ca.toggled.connect(self.update_visibility)
-        self.layout.addWidget(self.chk_windows_ca)
-
-        self.ca_encoding_layout = QHBoxLayout()
-        self.ca_encoding_label = QLabel()
-        self.ca_encoding_input = QLineEdit()
-        self.ca_encoding_input.setText(self.settings.get_ca_bundle_cert_encoding())
-        self.ca_encoding_layout.addWidget(self.ca_encoding_label)
-        self.ca_encoding_layout.addWidget(self.ca_encoding_input)
-        self.layout.addLayout(self.ca_encoding_layout)
-
-        # --- Action buttons ---
+        # ── Boutons globaux ───────────────────────────────────────────────
         self.btn_layout = QHBoxLayout()
-        self.btn_test = QPushButton()
         self.btn_save = QPushButton()
         self.btn_cancel = QPushButton()
-        self.btn_reset = QPushButton() 
-        self.btn_layout.addWidget(self.btn_test)
+        self.btn_reset = QPushButton()
         self.btn_layout.addWidget(self.btn_save)
         self.btn_layout.addWidget(self.btn_cancel)
         self.btn_layout.addWidget(self.btn_reset)
         self.layout.addLayout(self.btn_layout)
 
-        # Button signal connections
         self.btn_test.clicked.connect(self.test_connection)
         self.btn_save.clicked.connect(self.save_settings)
         self.btn_cancel.clicked.connect(self.reject)
         self.btn_reset.clicked.connect(self.on_click_reset)
 
-        # Connect here, not in update_visibility, to avoid creating duplicate connections on each call
+        # Connect here, not in update_visibility, to avoid duplicate connections
         self.trace_checkbox.toggled.connect(self.update_visibility)
         self.chk_agent_mode.toggled.connect(self.update_visibility)
 
-        # Populate all labels and apply initial visibility rules
         self.refresh_texts()
         self.update_visibility()
 
@@ -254,6 +276,13 @@ class OptionsDialog(QDialog):
         self.t = get_translations(self.lang)
 
         self.setWindowTitle(self.t["dock_title"])
+
+        self.tab_widget.setTabText(0, self.t.get("tab_connection", "Connexion"))
+        self.tab_widget.setTabText(1, self.t.get("tab_llm", "LLM"))
+        self.tab_widget.setTabText(2, self.t.get("tab_agent", "Agent"))
+        self.tab_widget.setTabText(3, self.t.get("tab_interface", "Interface"))
+        self.ca_group.setTitle(self.t.get("ca_bundle_group", "Certificats réseau (avancé)"))
+
         self.mode_label.setText(self.t["mode"])
         self.mode_combo.setItemText(0, self.t.get("mode_local", "Local"))
         self.mode_combo.setItemText(1, self.t.get("mode_remote", "Distant"))

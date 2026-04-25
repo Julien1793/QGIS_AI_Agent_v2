@@ -43,13 +43,36 @@ class AgentStepsRenderer:
 
     def __init__(self):
         self.events = []
+        self._pending_calls = {}  # tool_name -> [index, ...] of unresolved tool_call events
 
     def add_event(self, event: dict):
-        if event and isinstance(event, dict):
-            self.events.append(event)
+        if not event or not isinstance(event, dict):
+            return
+        etype = event.get("type", "")
+        tool_name = (event.get("data") or {}).get("name", "")
+
+        if etype in ("tool_result", "tool_error") and tool_name:
+            pending = self._pending_calls.get(tool_name)
+            if pending:
+                idx = pending.pop(0)
+                if not pending:
+                    del self._pending_calls[tool_name]
+                original_data = self.events[idx].get("data") or {}
+                self.events[idx] = {
+                    "type": etype,
+                    "text": event.get("text", ""),
+                    "data": {**original_data, **(event.get("data") or {})},
+                }
+                return
+
+        if etype == "tool_call" and tool_name:
+            self._pending_calls.setdefault(tool_name, []).append(len(self.events))
+
+        self.events.append(event)
 
     def reset(self):
         self.events = []
+        self._pending_calls = {}
 
     def to_html(self, show_final_marker: bool = False) -> str:
         if not self.events:
@@ -88,6 +111,8 @@ class AgentStepsRenderer:
         safe_text = _html.escape(text).replace("\n", "<br>")
         if etype == "tool_call":
             safe_text = self._highlight_tool_name(event, safe_text)
+        elif etype in ("tool_result", "tool_error"):
+            safe_text = self._prepend_tool_badge(event, safe_text)
 
         italic = "font-style:italic;" if etype in ("thinking", "final") else ""
         return (
@@ -95,6 +120,18 @@ class AgentStepsRenderer:
             f'<b style="color:{color};">{icon}</b> {safe_text}'
             f'</p>'
         )
+
+    def _prepend_tool_badge(self, event: dict, safe_text: str) -> str:
+        tool_name = (event.get("data") or {}).get("name")
+        if not tool_name:
+            return safe_text
+        badge = (
+            f'<span style="font-family:\'Consolas\',monospace;'
+            f'background-color:#2a3545;color:#a8d4f0;'
+            f'padding:1px 4px;font-size:11px;">{tool_name}</span>'
+        )
+        sep = ' <span style="color:#4a5565;">—</span> ' if safe_text else ""
+        return f'{badge}{sep}{safe_text}'
 
     def _highlight_tool_name(self, event: dict, safe_text: str) -> str:
         data = event.get("data") or {}

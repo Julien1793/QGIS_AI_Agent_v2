@@ -147,14 +147,14 @@ class ProcessRunner:
 
             if result.get("success"):
                 yield _evt("tool_result",
-                           f"✓ Étape {idx + 1} réussie",
+                           f"Étape {idx + 1} réussie",
                            data={"name": tool_name, "result": result})
             else:
                 error = result.get("error", "Erreur inconnue")
                 if len(error) > 400:
                     error = error[:400] + "..."
                 yield _evt("tool_error",
-                           f"✗ Étape {idx + 1} échouée : {error}",
+                           f"Étape {idx + 1} échouée : {error}",
                            data={"name": tool_name, "result": result})
                 yield _evt("aborted", f"Traitement interrompu à l'étape {idx + 1}.")
                 return

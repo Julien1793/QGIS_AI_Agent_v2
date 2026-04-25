@@ -65,7 +65,18 @@ class AgentLoop:
         # 3 — Retrieve the tool schemas for the detected intents.
         tools = get_schemas_for_intent(intents)
         if not self.settings.get_canvas_capture_enabled():
-            tools = [s for s in tools if s["function"]["name"] != "capture_map_canvas"]
+            _hint = " ALWAYS call capture_map_canvas afterwards to verify the result."
+            cleaned = []
+            for s in tools:
+                if s["function"]["name"] == "capture_map_canvas":
+                    continue
+                desc = s["function"].get("description", "")
+                if _hint in desc:
+                    import copy
+                    s = copy.deepcopy(s)
+                    s["function"]["description"] = desc.replace(_hint, "")
+                cleaned.append(s)
+            tools = cleaned
         tool_names = [tt["function"]["name"] for tt in tools]
 
         # 4 — Emit the detected intents and selected tools to the UI.
@@ -93,8 +104,11 @@ class AgentLoop:
                 f"{t['project_snapshot_intro']}\n```json\n{snapshot_json}\n```\n\n"
                 f"{user_prompt}"
             )
+        system_prompt = t["agent_system_prompt"]
+        if self.settings.get_canvas_capture_enabled():
+            system_prompt += "\n" + t["agent_system_prompt_canvas_rules"]
         messages = [
-            {"role": "system", "content": t["agent_system_prompt"]},
+            {"role": "system", "content": system_prompt},
             *history,
             {"role": "user", "content": user_content},
         ]
