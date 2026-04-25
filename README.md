@@ -31,7 +31,7 @@ Two modes are available:
 |---|---|
 | **read** | `get_project_info`, `get_layer_info`, `get_layer_fields`, `get_layer_features`, `get_layer_statistics`, `get_unique_values`, `get_selected_features`, `get_layer_extent`, `get_layer_style`, `get_label_settings` |
 | **stats** | `get_field_value_counts`, `get_statistics_by_group`, `get_field_percentiles`, `get_field_correlation`, `check_geometry_validity` |
-| **process** | `buffer`, `clip`, `intersection`, `dissolve`, `difference`, `union`, `reproject_layer`, `centroids`, `fix_geometries`, `calculate_geometry`, `run_processing_algorithm` |
+| **process** | `buffer`, `clip`, `intersection`, `dissolve`, `difference`, `union`, `reproject_layer`, `centroids`, `fix_geometries`, `calculate_geometry`, `list_algorithms`, `get_algorithm_info`, `run_processing_algorithm` |
 | **join** | `join_by_location`, `join_by_field`, `count_points_in_polygon`, `merge_layers`, `extract_by_expression`, `extract_by_location` |
 | **select** | `select_by_expression`, `select_by_location`, `set_layer_filter`, `clear_selection`, `invert_selection` |
 | **style** | `set_single_symbol`, `set_categorized_style`, `set_graduated_style`, `set_proportional_symbols`, `set_rule_based_style`, `set_custom_categorized_colors`, `set_symbol_properties`, `set_marker_shape`, `set_layer_opacity`, `set_layer_blending_mode`, `get_layer_style` |
@@ -128,17 +128,39 @@ Open **Options** from the plugin panel to configure the connection.
 
 **Supported providers**: OpenAI, OpenRouter, Fireworks, or any OpenAI-compatible endpoint.
 
-### Other settings
+### Tab: LLM
 
 | Setting | Description |
 |---|---|
-| Language | Interface and system prompt language (French / English) |
-| History depth | Number of past conversation turns sent with each request (0–50) |
-| Streaming | Enable SSE streaming for real-time token output |
-| Project context | Inject a snapshot of the current QGIS project (layers, geometry types, CRS) into each agent request |
-| Max context tokens | Context window limit used as the denominator in the prompt token gauge |
-| Agent max iterations | Maximum tool-calling rounds per agent run |
-| Show agent steps | Display intermediate steps in the chat panel |
+| Enable streaming mode (SSE) | Stream tokens in real time as the model generates them (recommended) |
+| Last N turns | Number of past conversation turns sent with each request (0 = no history) |
+| Max tokens (response) | Maximum tokens the model can generate per response (`max_tokens` in the API request) |
+| Include project context | Inject a snapshot of the current QGIS project (layer names, geometry types, CRS) into each request |
+| Context tokens (input) | Context window size of your model — used as the denominator in the prompt token gauge |
+
+### Tab: Agent
+
+| Setting | Description |
+|---|---|
+| Agent mode | Enable the autonomous tool-calling agent (disabling switches to chat mode) |
+| Max iterations | Maximum tool-calling rounds per agent run before the loop is forced to stop |
+| Show steps in real time | Display each tool call and its result as intermediate steps in the chat panel |
+| Enable canvas capture (visual verification) | Allow the agent to screenshot the QGIS canvas to verify visual results after style or symbol changes |
+
+### Tab: Interface
+
+| Setting | Description |
+|---|---|
+| Assistant language | Interface and system prompt language (French / English) |
+| Review code before running | Show a dialog to inspect and edit generated code before it runs (chat mode only) |
+| Export requests (debug) | Write each API request and response to a JSON file for debugging |
+| Export folder | Folder where debug trace files are saved |
+
+### Tab: Connexion — Advanced
+
+| Setting | Description |
+|---|---|
+| Use Windows certificates (CA bundle) | Use a custom certificate authority bundle for HTTPS (on-premise deployments with self-signed certificates) |
 
 ---
 

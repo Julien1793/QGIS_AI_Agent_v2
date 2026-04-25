@@ -396,9 +396,12 @@ class AgentLoop:
                     "error": "Aucun intent valide fourni."}
 
         existing_names = {s["function"]["name"] for s in tools}
+        canvas_enabled = self.settings.get_canvas_capture_enabled()
         added = []
         for schema in get_schemas_for_intent(requested):
             name = schema["function"]["name"]
+            if name == "capture_map_canvas" and not canvas_enabled:
+                continue
             if name not in existing_names:
                 tools.append(schema)
                 existing_names.add(name)

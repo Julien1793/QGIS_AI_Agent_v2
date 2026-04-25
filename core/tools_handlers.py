@@ -59,13 +59,16 @@ def get_project_info() -> dict:
 
 def get_layer_info(layer_name: str) -> dict:
     """Return full details for a layer: CRS, geometry type, feature count, extent, source path."""
-    from qgis.core import QgsVectorLayer
+    from qgis.core import QgsVectorLayer, QgsUnitTypes
     layer = _get_layer(layer_name)
     if not layer:
         return _err("get_layer_info", f"Layer not found: {layer_name}")
+    crs = layer.crs()
     info = {
         "name": layer.name(),
-        "crs": layer.crs().authid(),
+        "crs": crs.authid(),
+        "is_geographic": crs.isGeographic(),
+        "map_units": QgsUnitTypes.encodeUnit(crs.mapUnits()),
         "source": layer.source(),
     }
     if isinstance(layer, QgsVectorLayer):
@@ -472,20 +475,89 @@ def count_points_in_polygon(polygon_layer_name: str, point_layer_name: str,
     }, output_layer_name)
 
 
-def run_processing_algorithm(algorithm: str, layer_name: str,
+def list_algorithms(keyword: str = "", max_results: int = 50) -> dict:
+    """Search available QGIS Processing algorithms by keyword."""
+    from qgis.core import QgsApplication
+    all_algos = QgsApplication.processingRegistry().algorithms()
+
+    if not keyword.strip():
+        summary = {}
+        for algo in all_algos:
+            pid = algo.provider().id()
+            summary[pid] = summary.get(pid, 0) + 1
+        return _ok("list_algorithms",
+                   message="Provide a keyword to search. Available providers:",
+                   providers=summary,
+                   total_algorithms=len(all_algos))
+
+    keyword_lower = keyword.lower()
+    results = [
+        {"id": a.id(), "name": a.displayName(), "group": a.group(), "provider": a.provider().id()}
+        for a in all_algos
+        if keyword_lower in a.id().lower()
+        or keyword_lower in a.displayName().lower()
+        or keyword_lower in a.group().lower()
+    ]
+    results.sort(key=lambda a: a["id"])
+    truncated = len(results) > max_results
+    return _ok("list_algorithms",
+               keyword=keyword,
+               count=len(results),
+               truncated=truncated,
+               hint="Refine your keyword to narrow results." if truncated else None,
+               algorithms=results[:max_results])
+
+
+def get_algorithm_info(algorithm: str) -> dict:
+    """Return parameter schema of a QGIS Processing algorithm (call before run_processing_algorithm)."""
+    from qgis.core import QgsApplication, QgsProcessingParameterDefinition
+    algo = QgsApplication.processingRegistry().algorithmById(algorithm)
+    if not algo:
+        return _err("get_algorithm_info", f"Algorithm not found: '{algorithm}'")
+
+    params = []
+    for p in algo.parameterDefinitions():
+        if p.name() == "OUTPUT":
+            continue
+        is_optional = bool(p.flags() & QgsProcessingParameterDefinition.FlagOptional)
+        params.append({
+            "name": p.name(),
+            "type": p.type(),
+            "description": p.description(),
+            "required": not is_optional,
+            "default": p.defaultValue(),
+        })
+
+    outputs = [{"name": o.name(), "description": o.description()}
+               for o in algo.outputDefinitions()]
+
+    return _ok("get_algorithm_info",
+               algorithm=algorithm,
+               display_name=algo.displayName(),
+               group=algo.group(),
+               parameters=params,
+               outputs=outputs)
+
+
+def run_processing_algorithm(algorithm: str,
                              parameters: dict,
                              output_layer_name: str = "algo_result") -> dict:
-    """Generic fallback: run any Processing algorithm by its string identifier."""
+    """Generic fallback: run any Processing algorithm. Call get_algorithm_info first."""
     import processing
     from qgis.core import QgsProject
-    layer = _get_layer(layer_name)
-    if not layer:
-        return _err("run_processing_algorithm", f"Layer not found: {layer_name}")
-    params = dict(parameters)
-    params["INPUT"] = layer
-    params["OUTPUT"] = "memory:"
+
+    # Auto-resolve string values that match a project layer name to layer objects.
+    resolved = {}
+    for key, value in parameters.items():
+        if isinstance(value, str):
+            layers = QgsProject.instance().mapLayersByName(value)
+            resolved[key] = layers[0] if layers else value
+        else:
+            resolved[key] = value
+
+    resolved["OUTPUT"] = "memory:"
     try:
-        result = processing.run(algorithm, params)
+        result = processing.run(algorithm, resolved)
         out = result.get("OUTPUT")
         if out is None:
             return _err("run_processing_algorithm",

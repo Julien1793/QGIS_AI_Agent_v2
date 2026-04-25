@@ -705,6 +705,76 @@ REGISTRY = {
         },
     },
 
+    "list_algorithms": {
+        "intents": ["process"],
+        "handler": "list_algorithms",
+        "schema": {
+            "type": "function",
+            "function": {
+                "name": "list_algorithms",
+                "description": (
+                    "Search all available QGIS Processing algorithms by keyword (operation type, name, or group). "
+                    "Use this to discover which algorithms exist for a given GIS operation before running one. "
+                    "Examples: search 'buffer' to find all buffer variants, 'dissolve' for dissolve tools, "
+                    "'clip' for clip algorithms, 'simplify' for simplification tools. "
+                    "The keyword is matched against algorithm id, name, and group — so searching by concept works. "
+                    "Workflow: list_algorithms → pick the best id → get_algorithm_info → run_processing_algorithm."
+                ),
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "keyword": {
+                            "type": "string",
+                            "description": (
+                                "GIS operation or concept to search for (e.g. 'buffer', 'dissolve', 'clip', 'join', 'simplify'). "
+                                "Matched against algorithm id, name, and group. "
+                                "Empty string returns a summary of available providers instead of the full list."
+                            ),
+                        },
+                        "max_results": {
+                            "type": "integer",
+                            "description": "Maximum number of results to return. Defaults to 50.",
+                        },
+                    },
+                    "required": ["keyword"],
+                },
+            },
+        },
+    },
+
+    "get_algorithm_info": {
+        "intents": ["process"],
+        "handler": "get_algorithm_info",
+        "schema": {
+            "type": "function",
+            "function": {
+                "name": "get_algorithm_info",
+                "description": (
+                    "Returns the full parameter schema (names, types, required/optional, defaults) "
+                    "of any QGIS Processing algorithm given its id. "
+                    "Use the 'id' field returned by list_algorithms as input. "
+                    "ALWAYS call this BEFORE run_processing_algorithm so you know the exact "
+                    "parameter names and types to pass. "
+                    "OUTPUT is excluded from the returned parameters (it is handled automatically)."
+                ),
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "algorithm": {
+                            "type": "string",
+                            "description": (
+                                "Full algorithm identifier, either already known (e.g. 'native:buffer', "
+                                "'gdal:buffervectors', 'grass:v.buffer') or taken from the 'id' field "
+                                "returned by list_algorithms."
+                            ),
+                        },
+                    },
+                    "required": ["algorithm"],
+                },
+            },
+        },
+    },
+
     "run_processing_algorithm": {
         "intents": ["process"],
         "handler": "run_processing_algorithm",
@@ -715,24 +785,33 @@ REGISTRY = {
                 "description": (
                     "Generic fallback: runs ANY QGIS Processing algorithm by its full identifier. "
                     "Use ONLY when no specific tool covers the need. "
-                    "Examples: 'native:simplifygeometries', 'qgis:advancedpythonfieldcalculator', "
-                    "'native:extractbyattribute', 'native:splitvectorlayer'."
+                    "ALWAYS call get_algorithm_info first to get exact parameter names and types. "
+                    "Pass layer names as plain strings in parameters — they are resolved to layer "
+                    "objects automatically. OUTPUT is always injected automatically, do not include it."
                 ),
                 "parameters": {
                     "type": "object",
                     "properties": {
                         "algorithm": {
                             "type": "string",
-                            "description": "Full algorithm identifier. Ex: 'native:simplifygeometries'.",
+                            "description": (
+                                "Full algorithm identifier, either already known (e.g. 'native:buffer') "
+                                "or taken from the 'id' field returned by list_algorithms."
+                            ),
                         },
-                        "layer_name": {"type": "string"},
                         "parameters": {
                             "type": "object",
-                            "description": "Algorithm-specific parameters (excluding INPUT and OUTPUT, which are handled automatically).",
+                            "description": (
+                                "All algorithm parameters as reported by get_algorithm_info. "
+                                "For parameters of type 'source', 'vector', or 'raster', pass the "
+                                "layer name as a string — it will be resolved to a layer object automatically. "
+                                "Ex: {\"INPUT\": \"communes\", \"OVERLAY\": \"zones\", \"DISTANCE\": 500}. "
+                                "Do NOT include OUTPUT."
+                            ),
                         },
                         "output_layer_name": {"type": "string"},
                     },
-                    "required": ["algorithm", "layer_name", "parameters", "output_layer_name"],
+                    "required": ["algorithm", "parameters", "output_layer_name"],
                 },
             },
         },

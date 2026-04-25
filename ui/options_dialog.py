@@ -4,7 +4,8 @@ from qgis.PyQt.QtWidgets import (
     QPushButton, QComboBox, QMessageBox, QSpinBox, QCheckBox, QFileDialog,
     QTabWidget, QGroupBox, QWidget
 )
-from qgis.PyQt.QtCore import pyqtSignal
+from qgis.PyQt.QtCore import pyqtSignal, QUrl
+from qgis.PyQt.QtGui import QDesktopServices
 import requests
 from ..utils.translation import get_translations
 
@@ -212,15 +213,19 @@ class OptionsDialog(QDialog):
 
         # ── Boutons globaux ───────────────────────────────────────────────
         self.btn_layout = QHBoxLayout()
+        self.btn_help = QPushButton()
         self.btn_save = QPushButton()
         self.btn_cancel = QPushButton()
         self.btn_reset = QPushButton()
+        self.btn_layout.addWidget(self.btn_help)
+        self.btn_layout.addStretch()
         self.btn_layout.addWidget(self.btn_save)
         self.btn_layout.addWidget(self.btn_cancel)
         self.btn_layout.addWidget(self.btn_reset)
         self.layout.addLayout(self.btn_layout)
 
         self.btn_test.clicked.connect(self.test_connection)
+        self.btn_help.clicked.connect(self.open_help)
         self.btn_save.clicked.connect(self.save_settings)
         self.btn_cancel.clicked.connect(self.reject)
         self.btn_reset.clicked.connect(self.on_click_reset)
@@ -292,6 +297,7 @@ class OptionsDialog(QDialog):
         self.model_label.setText(self.t["model"])
         self.key_label.setText(self.t["api_key"])
         self.btn_test.setText(self.t["test"])
+        self.btn_help.setText(self.t.get("help", "? Help"))
         self.btn_save.setText(self.t["save"])
         self.btn_cancel.setText(self.t["cancel"])
         self.btn_reset.setText(self.t["reset"])
@@ -357,6 +363,11 @@ class OptionsDialog(QDialog):
     # -------------------------
     # Actions
     # -------------------------
+    def open_help(self):
+        QDesktopServices.openUrl(QUrl(
+            "https://github.com/Julien1793/QGIS_AI_Agent_v2/blob/master/README.md#configuration"
+        ))
+
     def test_connection(self):
         url = self.url_input.text().strip()
         model = (self.model_input.text().strip() or "gpt-4")

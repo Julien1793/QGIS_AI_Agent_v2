@@ -28,6 +28,7 @@ def get_translations(lang):
             "code_preview": "Aperçu du code (modifiable avant exécution)",
             "run_now": "Lancer",
             "project_snapshot_intro": "Voici l'état du projet QGIS de l'utilisateur :",
+            "help": "? Aide",
             "reset": "Réinitialiser",
             "reset_confirm": "Réinitialiser tous les réglages du plugin ?\n(Cela n'efface pas vos projets QGIS.)",
             "reset_done": "Réglages réinitialisés.",
@@ -276,6 +277,7 @@ def get_translations(lang):
                 "If no output path is specified, write in memory."
             ),
             "project_snapshot_intro": "Here is the user's QGIS project state:",
+            "help": "? Help",
             "reset": "Reset",
             "reset_confirm": "Reset all plugin settings?\n(This does not delete your QGIS projects.)",
             "reset_done": "Settings reset.",
@@ -378,6 +380,10 @@ def get_translations(lang):
                 "- After each tool_call, analyze the result before continuing.\n"
                 "- If an operation fails (success: false), explain why and propose an alternative.\n"
                 "- If you need to know the fields of a layer, use get_layer_fields first.\n"
+                "- CRS AND DISTANCE UNITS: Before any distance-based operation (buffer, offset, distance matrix...), "
+                "check the layer CRS with get_layer_info. If 'is_geographic' is true (map_units: degrees, e.g. EPSG:4326), "
+                "reproject the layer to a metric CRS first (use an appropriate UTM zone or local projection). "
+                "Never apply metric distances to a geographic CRS — the result will be silently wrong.\n"
                 "- Use run_pyqgis_code ONLY if no other tool covers the need.\n"
                 "- When using run_pyqgis_code, use print() to output verification results — "
                 "all printed output is captured and returned to you in the 'print_output' field. "
