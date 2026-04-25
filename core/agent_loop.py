@@ -102,14 +102,15 @@ class AgentLoop:
         # 6 — Agentic loop: LLM call → tool execution → tool result → next LLM call.
         total_tokens = 0
         ctx_max = self.settings.get_project_context_max_tokens()
-        # first_prompt_tokens: input size of the first call = system + history + snapshot + tools + user message.
+        # last_prompt_tokens: input size of the most recent LLM call — grows each iteration as tool results accumulate.
         # last_completion_tokens: output size of the most recent call = what gets added to history next turn.
-        # Together they estimate the input size of the next fresh request.
-        first_prompt_tokens = 0
+        # Mid-loop: gauge shows last_prompt_tokens only (loop still running, no final response yet).
+        # At exit: gauge shows last_prompt_tokens + last_completion_tokens (full next-request estimate).
+        last_prompt_tokens = 0
         last_completion_tokens = 0
 
-        def _emit_gauge():
-            estimated = first_prompt_tokens + last_completion_tokens
+        def _emit_gauge(mid_loop=False):
+            estimated = last_prompt_tokens if mid_loop else last_prompt_tokens + last_completion_tokens
             self._emit(on_step, "context_usage", "",
                        data={"prompt_tokens": estimated, "context_max": ctx_max})
             if ctx_max > 0 and estimated > 0:
@@ -131,9 +132,8 @@ class AgentLoop:
 
             response, usage, prompt_tokens = self._llm_call(messages, tools)
             total_tokens += usage
+            last_prompt_tokens = prompt_tokens
             last_completion_tokens = max(usage - prompt_tokens, 0)
-            if iteration == 0:
-                first_prompt_tokens = prompt_tokens
 
             # LLM call failed — emit an error event and abort the loop.
             if response is None:
@@ -149,7 +149,8 @@ class AgentLoop:
                 self._emit(on_step, "final", final_text)
                 return final_text, total_tokens
 
-            # The LLM requested one or more tool calls — execute them.
+            # The LLM requested one or more tool calls — update gauge and execute them.
+            _emit_gauge(mid_loop=True)
             messages.append({"role": "assistant", **response})
 
             for tool_call in response["tool_calls"]:
@@ -274,8 +275,8 @@ class AgentLoop:
                     valid = {
                         "chat", "read", "stats",
                         "process", "join", "select",
-                        "style", "symbol", "label",
-                        "field", "layer", "export",
+                        "style", "label",
+                        "field", "layer",
                         "view", "raster",
                     }
                     filtered = [i for i in intents if i in valid]
@@ -371,7 +372,10 @@ class AgentLoop:
 
     def _expand_tools(self, args: dict, tools: list, t: dict) -> dict:
         """Inject additional tool schemas into the live tools list based on requested intents."""
-        valid_intents = {"read", "process", "select", "style", "edit", "export", "analyse", "view"}
+        valid_intents = {
+            "read", "stats", "process", "join", "select",
+            "style", "label", "field", "layer", "view", "raster",
+        }
         requested = [i for i in args.get("intents", []) if i in valid_intents]
         if not requested:
             return {"success": False, "tool": "request_additional_tools",

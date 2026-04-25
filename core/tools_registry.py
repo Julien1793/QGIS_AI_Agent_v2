@@ -1133,7 +1133,7 @@ REGISTRY = {
     },
 
     "set_symbol_properties": {
-        "intents": ["symbol"],
+        "intents": ["style"],
         "handler": "set_symbol_properties",
         "schema": {
             "type": "function",
@@ -1186,7 +1186,7 @@ REGISTRY = {
     },
 
     "set_marker_shape": {
-        "intents": ["symbol"],
+        "intents": ["style"],
         "handler": "set_marker_shape",
         "schema": {
             "type": "function",
@@ -1311,7 +1311,7 @@ REGISTRY = {
     },
 
     "set_layer_opacity": {
-        "intents": ["symbol"],
+        "intents": ["style"],
         "handler": "set_layer_opacity",
         "schema": {
             "type": "function",
@@ -1334,7 +1334,7 @@ REGISTRY = {
     },
 
     "set_layer_blending_mode": {
-        "intents": ["symbol"],
+        "intents": ["style"],
         "handler": "set_layer_blending_mode",
         "schema": {
             "type": "function",
@@ -2117,7 +2117,7 @@ REGISTRY = {
     },
 
     "export_layer": {
-        "intents": ["export"],
+        "intents": ["layer"],
         "handler": "export_layer",
         "schema": {
             "type": "function",
@@ -2209,7 +2209,7 @@ REGISTRY = {
     },
 
     "set_raster_style": {
-        "intents": ["raster", "symbol"],
+        "intents": ["raster"],
         "handler": "set_raster_style",
         "schema": {
             "type": "function",
@@ -2457,7 +2457,7 @@ REGISTRY = {
                     "Requests access to additional tools if you realise mid-execution "
                     "that the available tools do not cover all needs. "
                     "Specify the missing intents from: read, stats, process, join, select, "
-                    "style, symbol, label, field, layer, export, view, raster. "
+                    "style, label, field, layer, view, raster. "
                     "New tools will be immediately available for subsequent calls."
                 ),
                 "parameters": {

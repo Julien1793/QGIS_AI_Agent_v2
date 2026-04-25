@@ -19,7 +19,7 @@ It works with **local LLMs** (LM Studio, Ollama) as well as **cloud APIs** (Open
 Two modes are available:
 
 - **Chat mode** — conversational assistant that generates and optionally executes PyQGIS code
-- **Agent mode** — autonomous loop that calls a library of ~30 native GIS tools to complete multi-step tasks
+- **Agent mode** — autonomous loop that calls a library of 75 native GIS tools to complete multi-step tasks
 
 ---
 
@@ -34,12 +34,10 @@ Two modes are available:
 | **process** | `buffer`, `clip`, `intersection`, `dissolve`, `difference`, `union`, `reproject_layer`, `centroids`, `fix_geometries`, `calculate_geometry`, `run_processing_algorithm` |
 | **join** | `join_by_location`, `join_by_field`, `count_points_in_polygon`, `merge_layers`, `extract_by_expression`, `extract_by_location` |
 | **select** | `select_by_expression`, `select_by_location`, `set_layer_filter`, `clear_selection`, `invert_selection` |
-| **style** | `set_single_symbol`, `set_categorized_style`, `set_graduated_style`, `set_proportional_symbols`, `set_rule_based_style`, `set_custom_categorized_colors` |
-| **symbol** | `set_symbol_properties`, `set_marker_shape`, `set_layer_opacity`, `set_layer_blending_mode` |
-| **label** | `enable_labels`, `disable_labels`, `set_label_text_format`, `set_label_buffer`, `set_label_placement`, `set_label_expression`, `set_label_shadow`, `set_label_background`, `set_label_callout` |
-| **field** | `add_field`, `delete_field`, `rename_field`, `calculate_field` |
-| **layer** | `load_layer`, `rename_layer`, `remove_layer`, `set_layer_visibility`, `set_scale_based_visibility` |
-| **export** | `export_layer` |
+| **style** | `set_single_symbol`, `set_categorized_style`, `set_graduated_style`, `set_proportional_symbols`, `set_rule_based_style`, `set_custom_categorized_colors`, `set_symbol_properties`, `set_marker_shape`, `set_layer_opacity`, `set_layer_blending_mode`, `get_layer_style` |
+| **label** | `get_label_settings`, `enable_labels`, `disable_labels`, `set_label_text_format`, `set_label_buffer`, `set_label_placement`, `set_label_expression`, `set_label_shadow`, `set_label_background`, `set_label_callout` |
+| **field** | `add_field`, `delete_field`, `rename_field`, `calculate_field`, `calculate_geometry` |
+| **layer** | `load_layer`, `rename_layer`, `remove_layer`, `export_layer`, `set_layer_visibility`, `set_scale_based_visibility` |
 | **view** | `zoom_to_layer`, `zoom_to_feature`, `refresh_canvas` |
 | **raster** | `get_raster_info`, `get_raster_statistics`, `set_raster_style` |
 | **always** | `capture_map_canvas`, `request_additional_tools` |
@@ -166,7 +164,7 @@ Show me the 5 largest features in the buildings layer.
 
 Switch to **Agent** mode in the panel. Describe your task in plain language — the agent will:
 
-1. Classify the intent using a lightweight LLM pre-call (14 intent categories below)
+1. Classify the intent using a lightweight LLM pre-call (12 intent categories below)
 2. Select only the relevant tools for those intents (max ~10 tools per call)
 3. Call them iteratively, passing results between steps
 4. Capture the map canvas after visual changes
@@ -180,12 +178,10 @@ Switch to **Agent** mode in the panel. Describe your task in plain language — 
 | `process` | Geometry operations producing a new layer (buffer, clip, dissolve, intersection, difference, union, reproject, centroids, fix geometries) |
 | `join` | Combine data from multiple layers (spatial join, attribute join, count points in polygon, merge layers) |
 | `select` | Select or filter features (by expression, by location, extract to new layer, set filter, clear/invert selection) |
-| `style` | Set layer renderer / classification (single symbol, categorized, graduated, proportional, rule-based) |
-| `symbol` | Adjust symbol appearance (marker shape, size, stroke, opacity, blending mode) |
-| `label` | Add, remove or configure labels (text, font, buffer, placement, expression, shadow, background) |
+| `style` | Set layer renderer / classification (single symbol, categorized, graduated, proportional, rule-based) and adjust symbol appearance (marker shape, size, stroke, opacity, blending mode) |
+| `label` | Add, remove or configure labels (text, font, buffer, placement, expression, shadow, background, callout) |
 | `field` | Add, delete, rename or calculate a field; calculate geometry attributes |
-| `layer` | Load, remove or rename a layer in the project |
-| `export` | Export or save a layer to a file |
+| `layer` | Load, remove, rename a layer in the project, or export/save a layer to a file |
 | `view` | Zoom, navigate the map, show/hide layers, set scale visibility |
 | `raster` | Raster-specific operations (info, statistics, pseudocolor/grayscale style) |
 
