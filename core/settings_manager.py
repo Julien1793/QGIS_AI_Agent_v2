@@ -188,6 +188,12 @@ class SettingsManager:
     def set_agent_max_tokens(self, n: int):
         self.set("agent_max_tokens", int(n))
 
+    def get_request_timeout(self) -> int:
+        return self.get_int("request_timeout", 300)
+
+    def set_request_timeout(self, n: int):
+        self.set("request_timeout", int(n))
+
     # --- Custom processes ---
     def get_processes_folder(self) -> str:
         import os

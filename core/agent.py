@@ -2,16 +2,21 @@
 import requests, re, os, json, time
 from qgis.core import Qgis
 from ..utils.translation import get_translations
+from ..utils.http import post_with_retry
 
 class AIAgent:
     def __init__(self, settings_manager):
         self.settings = settings_manager
 
     
-    def _supports_zero_max_tokens(self, url: str) -> bool:
-        # OpenAI and OpenRouter accept max_tokens=0; LM Studio (localhost:1234) does not.
+    def _supports_zero_max_tokens(self, url: str, model: str = "") -> bool:
+        # OpenAI, OpenRouter, Fireworks and Mistral-family models accept max_tokens=0.
+        # LM Studio (localhost:1234) does not.
         url = (url or "").lower()
-        return ("api.openai.com" in url) or ("openrouter.ai" in url) or ("fireworks.ai" in url)
+        model = (model or "").lower()
+        known_url = ("api.openai.com" in url) or ("openrouter.ai" in url) or ("fireworks.ai" in url) or ("api.mistral.ai" in url)
+        mistral_model = any(k in model for k in ("mistral", "mixtral", "codestral", "devstral"))
+        return known_url or mistral_model
 
     def chat(self, user_input, mode="chat", lang="fr", messages=None, on_stream=None):
         """
@@ -108,9 +113,9 @@ class AIAgent:
                 hdrs.setdefault("Accept", "text/event-stream")
                 hdrs.setdefault("Content-Type", "application/json")
 
-                resp = requests.post(
-                    api_url, json=payload_stream, headers=hdrs,
-                    timeout=300, stream=True,
+                resp = post_with_retry(
+                    api_url, payload_stream, hdrs,
+                    timeout=self.settings.get_request_timeout(), stream=True,
                     verify=self.settings.get_ssl_verify()
                 )
 
@@ -188,7 +193,7 @@ class AIAgent:
                 # max_tokens=0 is accepted by OpenAI and most proxies; errors are silently ignored.
                 if not usage:
                     try:
-                        if self._supports_zero_max_tokens(api_url):
+                        if self._supports_zero_max_tokens(api_url, model):
                             payload_usage = {"model": model, "messages": built_messages, "max_tokens": 0}
                             r2 = requests.post(api_url, json=payload_usage, headers=headers, timeout=15,
                                                verify=self.settings.get_ssl_verify())
@@ -221,8 +226,8 @@ class AIAgent:
 
 
             # --- Non-streaming mode: single blocking POST request.
-            resp = requests.post(api_url, json=payload, headers=headers, timeout=300,
-                                 verify=self.settings.get_ssl_verify())
+            resp = post_with_retry(api_url, payload, headers, timeout=self.settings.get_request_timeout(),
+                                         verify=self.settings.get_ssl_verify())
             trace = {
                 "when": time.strftime("%Y-%m-%d %H:%M:%S"),
                 "elapsed_sec": round(time.time() - t0, 3),

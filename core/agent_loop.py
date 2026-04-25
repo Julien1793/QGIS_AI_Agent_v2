@@ -12,11 +12,11 @@
 import json
 import re
 import time
-import requests
 
 from .tools_registry import get_schemas_for_intent, get_handler_name, REGISTRY
 from . import tools_handlers as handlers
 from ..utils.translation import get_translations
+from ..utils.http import post_with_retry
 
 
 class AgentLoop:
@@ -151,7 +151,8 @@ class AgentLoop:
 
             # LLM call failed — emit an error event and abort the loop.
             if response is None:
-                err_text = t["llm_request_error"]
+                detail = getattr(self, "_last_llm_error", "")
+                err_text = t["llm_request_error"] + (f": {detail}" if detail else "")
                 _emit_gauge()
                 self._emit(on_step, "final", err_text)
                 return err_text, total_tokens
@@ -171,8 +172,16 @@ class AgentLoop:
                 tool_name = tool_call["function"]["name"]
                 try:
                     tool_args = json.loads(tool_call["function"]["arguments"])
-                except Exception:
+                except Exception as e:
                     tool_args = {}
+                    try:
+                        from qgis.core import QgsMessageLog, Qgis
+                        QgsMessageLog.logMessage(
+                            f"[AgentLoop] Failed to parse arguments for tool '{tool_name}': {e}\n"
+                            f"Raw: {tool_call['function'].get('arguments', '')!r}",
+                            "AI Agent", Qgis.Warning)
+                    except Exception:
+                        pass
 
                 # Emit the tool call event before execution so the UI can show it immediately.
                 tool_call_text = t["agent_step_tool_calling"].format(tool=tool_name)
@@ -265,8 +274,8 @@ class AgentLoop:
             payload["temperature"] = 0
 
         try:
-            resp = requests.post(api_url, json=payload, headers=headers, timeout=30,
-                                 verify=self.settings.get_ssl_verify())
+            resp = post_with_retry(api_url, payload, headers, timeout=30,
+                                   verify=self.settings.get_ssl_verify())
             if not resp.ok:
                 try:
                     from qgis.core import QgsMessageLog, Qgis
@@ -348,8 +357,8 @@ class AgentLoop:
         }
 
         try:
-            resp = requests.post(api_url, json=payload, headers=headers, timeout=300,
-                                 verify=self.settings.get_ssl_verify())
+            resp = post_with_retry(api_url, payload, headers, timeout=self.settings.get_request_timeout(),
+                                   verify=self.settings.get_ssl_verify())
             resp.raise_for_status()
             data = resp.json()
 
@@ -377,7 +386,16 @@ class AgentLoop:
 
             return response, tokens, prompt_tokens
 
-        except Exception:
+        except Exception as e:
+            import traceback
+            self._last_llm_error = str(e)
+            try:
+                from qgis.core import QgsMessageLog, Qgis
+                QgsMessageLog.logMessage(
+                    f"[AgentLoop] LLM call failed: {traceback.format_exc()}",
+                    "AI Agent", Qgis.Critical)
+            except Exception:
+                pass
             return None, 0, 0
 
     # ══════════════════════════════════════════════════════════

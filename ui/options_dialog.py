@@ -129,6 +129,16 @@ class OptionsDialog(QDialog):
         self.agent_tokens_layout.addWidget(self.agent_tokens_spin)
         tab_llm_layout.addLayout(self.agent_tokens_layout)
 
+        self.timeout_layout = QHBoxLayout()
+        self.timeout_label = QLabel()
+        self.timeout_spin = QSpinBox()
+        self.timeout_spin.setRange(30, 600)
+        self.timeout_spin.setSingleStep(30)
+        self.timeout_spin.setValue(self.settings.get_request_timeout())
+        self.timeout_layout.addWidget(self.timeout_label)
+        self.timeout_layout.addWidget(self.timeout_spin)
+        tab_llm_layout.addLayout(self.timeout_layout)
+
         self.ctx_layout = QHBoxLayout()
         self.ctx_check = QCheckBox()
         self.ctx_check.setChecked(self.settings.get_include_project_context())
@@ -326,6 +336,8 @@ class OptionsDialog(QDialog):
         self.chk_canvas_capture.setToolTip(self.t.get("canvas_capture_enabled_hint", ""))
         self.agent_tokens_label.setText(self.t.get("agent_max_tokens", "Tokens max (réponse) :"))
         self.agent_tokens_spin.setToolTip(self.t.get("agent_max_tokens_hint", ""))
+        self.timeout_label.setText(self.t.get("request_timeout", "Timeout requête (s) :"))
+        self.timeout_spin.setToolTip(self.t.get("request_timeout_hint", ""))
 
         self.chk_windows_ca.setText(self.t.get("use_windows_ca_bundle", "Utiliser les certificats Windows (CA bundle)"))
         self.chk_windows_ca.setToolTip(self.t.get("use_windows_ca_bundle_hint", ""))
@@ -387,7 +399,7 @@ class OptionsDialog(QDialog):
                 "model": model,
                 "messages": [{"role": "user", "content": "ping"}]
             }
-            response = requests.post(url, json=payload, headers=headers, timeout=10,
+            response = requests.post(url, json=payload, headers=headers, timeout=15,
                                      verify=self.settings.get_ssl_verify())
             response.raise_for_status()
 
@@ -439,6 +451,7 @@ class OptionsDialog(QDialog):
         self.settings.set_agent_show_steps(self.chk_agent_show_steps.isChecked())
         self.settings.set_canvas_capture_enabled(self.chk_canvas_capture.isChecked())
         self.settings.set_agent_max_tokens(int(self.agent_tokens_spin.value()))
+        self.settings.set_request_timeout(int(self.timeout_spin.value()))
 
         # Windows CA bundle
         ca_enabled = self.chk_windows_ca.isChecked()
@@ -480,6 +493,7 @@ class OptionsDialog(QDialog):
         self.api_key_input.setText("")
         if hasattr(self, "verify_checkbox"):
             self.verify_checkbox.setChecked(False)
+        self.timeout_spin.setValue(300)
 
         QMessageBox.information(self, self.t["reset"], self.t["reset_done"])
 

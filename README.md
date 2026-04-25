@@ -14,7 +14,7 @@
 
 **AI Assistant QGIS** is a plugin that lets you control QGIS using plain language. Describe what you want to do — buffer that layer, style features by category, clip two datasets, calculate a field — and the AI agent figures out how, selects the right tools, calls them in sequence, and reports back.
 
-It works with **local LLMs** (LM Studio, Ollama) as well as **cloud APIs** (OpenAI, OpenRouter, Fireworks). No internet connection is required if you run a local model.
+It works with **local LLMs** (LM Studio, Ollama), **cloud APIs** (OpenAI, OpenRouter, Fireworks), and **on-premise LLM servers** (any OpenAI-compatible endpoint). No internet connection is required if you run a local or internal model.
 
 Two modes are available:
 
@@ -53,7 +53,7 @@ Two modes are available:
 ### General
 
 - **Bilingual** interface: French and English
-- **Multi-backend LLM support**: LM Studio, Ollama, OpenAI, OpenRouter, Fireworks, any OpenAI-compatible endpoint
+- **Multi-backend LLM support**: LM Studio, Ollama, OpenAI, OpenRouter, Fireworks, on-premise LLM servers, any OpenAI-compatible endpoint
 - **SSE streaming** with graceful fallback to batch response
 - **Project context injection**: current layer names, geometry types, and CRS are automatically included per request; field schemas are fetched on demand via `get_layer_fields`
 - **Prompt token gauge**: live status bar indicator showing estimated input tokens for the next request vs. the configured context window limit
@@ -117,6 +117,8 @@ Open **Options** from the plugin panel to configure the connection.
 
 **Recommended models for GIS tasks**: any instruction-tuned model with ≥ 7B parameters. Models with good tool-calling support (e.g. Mistral, Qwen, LLaMA 3.1) work best in agent mode.
 
+**On-premise / internal servers**: set the API URL to your internal endpoint and leave the API key empty or set it to your internal token.
+
 ### Remote backend
 
 | Field | Value |
@@ -135,6 +137,7 @@ Open **Options** from the plugin panel to configure the connection.
 | Enable streaming mode (SSE) | Stream tokens in real time as the model generates them (recommended) |
 | Last N turns | Number of past conversation turns sent with each request (0 = no history) |
 | Max tokens (response) | Maximum tokens the model can generate per response (`max_tokens` in the API request) |
+| Request timeout (s) | Maximum wait time for an LLM server response before the request is considered failed (30–600 s, default 300 s) |
 | Include project context | Inject a snapshot of the current QGIS project (layer names, geometry types, CRS) into each request |
 | Context tokens (input) | Context window size of your model — used as the denominator in the prompt token gauge |
 
@@ -259,7 +262,10 @@ Agent mode:  user message → AgentLoop.run()   → intent detection
 | `core/project_indexer.py` | Serializes the current QGIS project as LLM context |
 | `core/process_recorder.py` | Records agent runs for saving as reusable processes |
 | `core/process_runner.py` | Replays `.aiprocess.json` files with variable substitution |
+| `utils/http.py` | Centralized HTTP retry utility — exponential backoff on 429/503 and network errors |
 | `ui/main_dock.py` | Central dock widget — chat display, streaming, dialogs |
+| `ui/workers.py` | Qt worker classes (`ChatWorker`, `AgentWorker`, `StreamWorker`) — run LLM calls off the main thread |
+| `ui/markdown_renderer.py` | Markdown-to-HTML renderer for chat messages (no external dependencies) |
 
 ### Adding a tool
 

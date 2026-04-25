@@ -73,6 +73,8 @@ def get_translations(lang):
             "agent_show_steps_hint": "Affiche chaque appel d'outil et son résultat dans le chat.",
             "agent_max_tokens": "Tokens max (réponse) :",
             "agent_max_tokens_hint": "Nombre maximum de tokens générés par appel LLM en mode agent (sortie uniquement, n'affecte pas le contexte).",
+            "request_timeout": "Timeout requête (s) :",
+            "request_timeout_hint": "Durée maximale d'attente d'une réponse du serveur LLM, en secondes. Augmenter si le modèle est lent sur de longs contextes.",
             "canvas_capture_enabled": "Activer la capture du canvas (vérification visuelle)",
             "canvas_capture_enabled_hint": "Permet à l'agent de capturer le canvas QGIS pour vérifier visuellement les styles et étiquettes.",
 
@@ -321,6 +323,8 @@ def get_translations(lang):
             "agent_show_steps_hint": "Display each tool call and its result in the chat.",
             "agent_max_tokens": "Max tokens (response):",
             "agent_max_tokens_hint": "Maximum tokens generated per LLM call in agent mode (output only, does not affect context).",
+            "request_timeout": "Request timeout (s):",
+            "request_timeout_hint": "Maximum wait time for an LLM server response, in seconds. Increase if the model is slow on long contexts.",
             "canvas_capture_enabled": "Enable canvas capture (visual verification)",
             "canvas_capture_enabled_hint": "Allows the agent to capture the QGIS canvas to visually verify styles and labels.",
 
