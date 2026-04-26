@@ -20,8 +20,11 @@ Two modes are available:
 
 - **Chat mode** — conversational assistant that generates and optionally executes PyQGIS code
 - **Agent mode** — autonomous loop that calls a library of 75 native GIS tools to complete multi-step tasks
-
 ---
+
+<img width="1907" height="895" alt="image" src="https://github.com/user-attachments/assets/88bb7b99-4360-4221-b564-b8e07c3bc69e" />
+
+
 
 ## Features
 
