@@ -10,6 +10,37 @@
 
 ---
 
+## Table of Contents
+
+- [Overview](#overview)
+- [Features](#features)
+  - [Agent Mode — 75 native GIS tools](#agent-mode-75-native-gis-tools)
+  - [Chat Mode](#chat-mode)
+  - [General](#general)
+- [Requirements](#requirements)
+- [Installation](#installation)
+  - [From source](#from-source)
+  - [Hot-reload during development](#hot-reload-during-development)
+- [Configuration](#configuration)
+  - [Local backend](#local-backend-no-api-key-required)
+  - [Remote backend](#remote-backend)
+  - [Tab: LLM](#tab-llm)
+  - [Tab: Agent](#tab-agent)
+  - [Tab: Interface](#tab-interface)
+  - [Tab: Connexion — Advanced](#tab-connexion--advanced)
+- [Usage](#usage)
+  - [Chat mode](#chat-mode-1)
+  - [Agent mode](#agent-mode)
+  - [Process recording and replay](#process-recording-and-replay)
+- [Architecture](#architecture)
+  - [Core modules](#core-modules)
+  - [Adding a tool](#adding-a-tool)
+- [Known Limitations](#known-limitations)
+- [License](#license)
+- [Acknowledgements](#acknowledgements)
+
+---
+
 ## Overview
 
 **AI Assistant QGIS** is a plugin that lets you control QGIS using plain language. Describe what you want to do — buffer that layer, style features by category, clip two datasets, calculate a field — and the AI agent figures out how, selects the right tools, calls them in sequence, and reports back.
@@ -229,9 +260,45 @@ using 5 classes and a blue-to-red color ramp. Add labels showing the commune nam
 
 ### Process recording and replay
 
-After a successful agent run, use **Save as process** to export the steps as an `.aiprocess.json` file. Layer names and field names detected during the run become named variables.
+Agent runs can be saved as reusable process templates and replayed against different data.
 
-Saved processes appear in the **Process Browser** tab and can be replayed against different data by substituting variables at run time.
+**Recording — Save as process**
+
+After a successful agent run, click **Save as process**. A dialog opens with four tabs:
+
+| Tab | Content |
+|---|---|
+| **Info** | Name, description, and destination subfolder inside your process library |
+| **Variables** | Auto-detected parameters (layer names, field names, …) shown as a table — edit the label and choose the type for each |
+| **Steps** | Per-step breakdown; `run_pyqgis_code` steps expose a code editor for direct editing; any step can be removed |
+| **Preview** | Live JSON preview of the file that will be saved |
+
+Variable types determine the input widget shown at run time:
+
+| Type | Input shown at run time |
+|---|---|
+| `layer` | Drop-down populated with layers currently loaded in the project |
+| `field` | Free text field |
+| `file` | Text field with a file-picker button |
+| `crs` | QGIS projection selector widget |
+| `value` | Plain text field |
+| `code` | Python code editor |
+
+Files are saved as `.aiprocess.json` in a user-configured folder. Use **Save As** to always create a new file, or **Save** to overwrite when editing an existing process.
+
+**Process Browser (Processes tab)**
+
+The **Processes** tab shows all saved processes in a tree that mirrors the actual folder structure on disk.
+
+- **↻** — refresh the tree from disk
+- **📁** — change the root library folder
+- **📁+** — create a new subfolder (also available via right-click on a folder)
+- Right-click a process → **Run**, **Edit**, or **Delete**
+- Double-click a process to open it directly
+
+**Running a saved process**
+
+Selecting a process and clicking **Open / Run** (or double-clicking) opens a run dialog that shows the process name, description, and number of recorded steps. Each variable is presented as the appropriate input widget — layers are pre-populated from the current project. Click **Lancer** to execute; progress is streamed in a color-coded log inside the dialog (tool calls in blue, successes in green, errors in red).
 
 ---
 
