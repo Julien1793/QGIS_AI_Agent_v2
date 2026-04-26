@@ -12,9 +12,10 @@ from qgis.PyQt.QtWidgets import (
     QLineEdit, QComboBox, QPushButton, QLabel,
     QTextEdit, QPlainTextEdit, QWidget, QDialogButtonBox,
     QScrollArea, QProgressBar, QFileDialog,
+    QDoubleSpinBox, QCheckBox, QColorDialog,
 )
 from qgis.PyQt.QtCore import Qt, QThread, QObject, pyqtSignal, pyqtSlot
-from qgis.PyQt.QtGui import QFont
+from qgis.PyQt.QtGui import QFont, QColor
 
 try:
     from qgis.core import QgsProject
@@ -126,8 +127,25 @@ class ProcessRunDialog(QDialog):
         if variables:
             form_widget = QWidget()
             self._form = QFormLayout(form_widget)
-            self._form.setSpacing(8)
+            self._form.setSpacing(4)
+
+            current_step = None
             for var in variables:
+                step_num = var.get("step_num")
+                step_tool = var.get("step_tool", "")
+
+                # Insert a step separator when we enter a new step block
+                if step_num is not None and step_num != current_step:
+                    current_step = step_num
+                    short_tool = step_tool.replace("set_label_", "lbl·").replace("set_", "")
+                    sep_lbl = QLabel(
+                        f"<small style='color:#4a90d9;'>— Étape {step_num} : "
+                        f"<b>{short_tool}</b> —</small>"
+                    )
+                    sep_lbl.setAlignment(Qt.AlignCenter)
+                    sep_lbl.setContentsMargins(0, 6, 0, 2)
+                    self._form.addRow(sep_lbl)
+
                 widget = self._make_input_widget(var)
                 self._input_widgets[var["id"]] = widget
                 self._form.addRow(var.get("label", var["id"]) + " :", widget)
@@ -135,7 +153,7 @@ class ProcessRunDialog(QDialog):
             scroll = QScrollArea()
             scroll.setWidgetResizable(True)
             scroll.setWidget(form_widget)
-            scroll.setMaximumHeight(280)
+            scroll.setMaximumHeight(300)
             root.addWidget(scroll)
         else:
             root.addWidget(QLabel("<i>Aucune variable — le traitement s'exécute tel quel.</i>"))
@@ -214,6 +232,48 @@ class ProcessRunDialog(QDialog):
             row.addWidget(btn)
             container._line_edit = le  # keep reference for value retrieval
             return container
+
+        if var_type == "color":
+            container = QWidget()
+            row = QHBoxLayout(container)
+            row.setContentsMargins(0, 0, 0, 0)
+            btn = QPushButton()
+            btn.setFixedHeight(28)
+            qc = QColor(default) if default and QColor(default).isValid() else QColor("#000000")
+            btn._color = qc
+            btn.setStyleSheet(f"background-color: {qc.name()}; border: 1px solid #888;")
+
+            lbl_hex = QLabel(qc.name())
+            lbl_hex.setStyleSheet("color: #666; font-size: 11px;")
+
+            def _pick(_checked=False, b=btn, lbl=lbl_hex):
+                c = QColorDialog.getColor(b._color, self, "Choisir une couleur")
+                if c.isValid():
+                    b._color = c
+                    b.setStyleSheet(f"background-color: {c.name()}; border: 1px solid #888;")
+                    lbl.setText(c.name())
+
+            btn.clicked.connect(_pick)
+            row.addWidget(btn)
+            row.addWidget(lbl_hex)
+            container._btn = btn
+            return container
+
+        if var_type == "number":
+            spin = QDoubleSpinBox()
+            spin.setRange(-1e9, 1e9)
+            spin.setDecimals(4)
+            spin.setStepType(QDoubleSpinBox.AdaptiveDecimalStepType)
+            try:
+                spin.setValue(float(default))
+            except (ValueError, TypeError):
+                spin.setValue(0.0)
+            return spin
+
+        if var_type == "boolean":
+            chk = QCheckBox()
+            chk.setChecked(str(default).strip().lower() in ("true", "1", "yes"))
+            return chk
 
         if var_type == "code":
             try:
@@ -308,6 +368,12 @@ class ProcessRunDialog(QDialog):
                 values[var_id] = widget.crs().authid()
             elif var_type == "file" and hasattr(widget, "_line_edit"):
                 values[var_id] = widget._line_edit.text()
+            elif var_type == "color" and hasattr(widget, "_btn"):
+                values[var_id] = widget._btn._color.name()
+            elif var_type == "number" and isinstance(widget, QDoubleSpinBox):
+                values[var_id] = widget.value()
+            elif var_type == "boolean" and isinstance(widget, QCheckBox):
+                values[var_id] = widget.isChecked()
             elif var_type == "code":
                 try:
                     from qgis.gui import QgsCodeEditorPython

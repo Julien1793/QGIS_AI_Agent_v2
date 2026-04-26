@@ -21,6 +21,13 @@ def _get_layer(layer_name: str):
     return layers[0] if layers else None
 
 
+def _to_bool(v) -> bool:
+    """Coerce any value to bool, handling string representations safely."""
+    if isinstance(v, bool):
+        return v
+    return str(v).strip().lower() in ("true", "1", "yes")
+
+
 def _ok(tool: str, **kwargs) -> dict:
     return {"success": True, "tool": tool, **kwargs}
 
@@ -1842,6 +1849,9 @@ def enable_labels(layer_name: str, field_name: str,
             placement = "around_point" if geom == 0 else "curved" if geom == 1 else "horizontal"
         settings.placement = _placement_enum(placement)
 
+        font_size = float(font_size)
+        bold = _to_bool(bold)
+        italic = _to_bool(italic)
         text_format = QgsTextFormat()
         font = QFont(font_family)
         font.setPointSizeF(font_size)
@@ -1907,18 +1917,18 @@ def set_label_text_format(layer_name: str,
         if font_family is not None:
             font.setFamily(font_family)
         if font_size is not None:
-            font.setPointSizeF(font_size)
-            text_format.setSize(font_size)
+            font.setPointSizeF(float(font_size))
+            text_format.setSize(float(font_size))
         if bold is not None:
-            font.setBold(bold)
+            font.setBold(_to_bool(bold))
         if italic is not None:
-            font.setItalic(italic)
+            font.setItalic(_to_bool(italic))
         if underline is not None:
-            font.setUnderline(underline)
+            font.setUnderline(_to_bool(underline))
         if color is not None:
             text_format.setColor(QColor(color))
         if opacity is not None:
-            text_format.setOpacity(max(0.0, min(1.0, opacity)))
+            text_format.setOpacity(max(0.0, min(1.0, float(opacity))))
 
         text_format.setFont(font)
         settings.setFormat(text_format)
@@ -1954,11 +1964,11 @@ def set_label_buffer(layer_name: str,
         text_format = settings.format()
 
         buf = QgsTextBufferSettings()
-        buf.setEnabled(enabled)
-        buf.setSize(size)
+        buf.setEnabled(_to_bool(enabled))
+        buf.setSize(float(size))
         buf.setSizeUnit(_render_unit("mm"))
         buf.setColor(QColor(color))
-        buf.setOpacity(max(0.0, min(1.0, opacity)))
+        buf.setOpacity(max(0.0, min(1.0, float(opacity))))
 
         text_format.setBuffer(buf)
         settings.setFormat(text_format)
@@ -2020,17 +2030,19 @@ def set_label_placement(layer_name: str,
 
         # dist = radial distance from feature (Around Point / Line / Curved / Perimeter)
         if distance is not None:
-            settings.dist = distance
+            settings.dist = float(distance)
             settings.distUnits = _render_unit(distance_units)
 
         # xOffset/yOffset = Cartesian shift applied after placement
         if offset_x is not None:
-            settings.xOffset = offset_x
+            settings.xOffset = float(offset_x)
             settings.offsetUnits = _render_unit(offset_units)
         if offset_y is not None:
-            settings.yOffset = offset_y
+            settings.yOffset = float(offset_y)
             settings.offsetUnits = _render_unit(offset_units)
 
+        min_scale = float(min_scale)
+        max_scale = float(max_scale)
         if min_scale > 0 or max_scale > 0:
             settings.scaleVisibility = True
             if min_scale > 0:
@@ -2100,14 +2112,14 @@ def set_label_shadow(layer_name: str,
         text_format = settings.format()
 
         shadow = QgsTextShadowSettings()
-        shadow.setEnabled(enabled)
+        shadow.setEnabled(_to_bool(enabled))
         shadow.setColor(QColor(color))
-        shadow.setOpacity(max(0.0, min(1.0, opacity)))
-        shadow.setBlurRadius(blur_radius)
+        shadow.setOpacity(max(0.0, min(1.0, float(opacity))))
+        shadow.setBlurRadius(float(blur_radius))
         shadow.setBlurUnit(_render_unit("mm"))
-        shadow.setOffsetDistance(offset_distance)
+        shadow.setOffsetDistance(float(offset_distance))
         shadow.setOffsetUnit(_render_unit("mm"))
-        shadow.setOffsetAngle(offset_angle)
+        shadow.setOffsetAngle(int(offset_angle))
 
         text_format.setShadow(shadow)
         settings.setFormat(text_format)
@@ -2160,7 +2172,7 @@ def set_label_background(layer_name: str,
         text_format = settings.format()
 
         bg = QgsTextBackgroundSettings()
-        bg.setEnabled(bool(enabled))
+        bg.setEnabled(_to_bool(enabled))
         bg.setType(getattr(QgsTextBackgroundSettings, shape_attr))
         bg.setFillColor(QColor(fill_color))
         bg.setStrokeColor(QColor(stroke_color))

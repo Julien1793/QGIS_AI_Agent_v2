@@ -200,6 +200,20 @@ def _coerce(s: str, default):
             return float(s)
         except (ValueError, TypeError):
             return s
+    # default is itself a string — infer numeric/bool type from its content
+    if isinstance(default, str):
+        dl = default.strip().lower()
+        if dl in ("true", "false"):
+            return s.strip().lower() in ("true", "1", "yes")
+        try:
+            if "." in default:
+                return float(s)
+            # default looks like an integer ("9"), but s may be "9.0" from a
+            # QDoubleSpinBox — int("9.0") would raise, so go through float first.
+            int(default)
+            return int(float(s))
+        except (ValueError, TypeError):
+            pass
     return s
 
 

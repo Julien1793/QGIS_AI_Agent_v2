@@ -7,15 +7,22 @@ import re
 
 
 # Parameter names that are candidates for becoming user-facing variables.
-_LAYER_PARAMS  = {"layer_name", "layer", "source_layer", "input_layer",
-                  "target_layer", "join_layer", "overlay_layer"}
-_FIELD_PARAMS  = {"field_name", "field", "join_field", "target_field",
-                  "source_field", "color_field", "value_field"}
-_FILE_PARAMS   = {"output_path", "file_path", "path", "output", "filepath"}
-_CRS_PARAMS    = {"crs", "crs_code", "target_crs", "source_crs"}
-_VALUE_PARAMS  = {"value", "expression", "filter_expression", "distance",
-                  "opacity", "min_value", "max_value", "num_classes",
-                  "width", "color", "label"}
+_LAYER_PARAMS   = {"layer_name", "layer", "source_layer", "input_layer",
+                   "target_layer", "join_layer", "overlay_layer"}
+_FIELD_PARAMS   = {"field_name", "field", "join_field", "target_field",
+                   "source_field", "color_field", "value_field"}
+_FILE_PARAMS    = {"output_path", "file_path", "path", "output", "filepath"}
+_CRS_PARAMS     = {"crs", "crs_code", "target_crs", "source_crs"}
+_COLOR_PARAMS   = {"color", "text_color", "buffer_color", "halo_color",
+                   "fill_color", "stroke_color", "outline_color",
+                   "background_color", "shadow_color"}
+_NUMBER_PARAMS  = {"opacity", "size", "distance", "width", "min_value",
+                   "max_value", "num_classes", "buffer_size", "offset_x",
+                   "offset_y", "rotation", "min_scale", "max_scale",
+                   "stroke_width", "blur_radius", "offset_distance",
+                   "offset_angle", "font_size", "size_x", "size_y"}
+_BOOL_PARAMS    = {"enabled", "visible", "bold", "italic", "underline"}
+_VALUE_PARAMS   = {"value", "expression", "filter_expression", "label"}
 
 
 class ProcessRecorder:
@@ -72,11 +79,17 @@ class ProcessRecorder:
         Each variable dict has keys:
             id        - unique identifier, e.g. "v_layer_0"
             label     - human-friendly default label
-            type      - "layer" | "field" | "file" | "crs" | "value" | "code"
+            type      - "layer" | "field" | "file" | "crs" | "color" | "number" | "boolean" | "value" | "code"
             default   - the value captured from the agent run
+            step_tool - tool name of the first step that defines this variable
+            step_num  - 1-based index of that step
             refs      - list of (step_index, param_key) where this value appears
         """
-        seen = {}   # (type, value) -> variable dict
+        # Key: (type, param_name, value) — param_name prevents merging semantically
+        # distinct params that happen to share the same value (e.g. stroke_color and
+        # label color both "#FFFFFF" would otherwise become the same variable).
+        # Same-named params across different steps ARE still merged (e.g. layer_name).
+        seen = {}
 
         for step_idx, step in enumerate(self.steps):
             tool = step["tool"]
@@ -88,7 +101,7 @@ class ProcessRecorder:
                 var_type = _infer_type(key)
                 if var_type is None:
                     continue
-                sig = (var_type, str(value))
+                sig = (var_type, key, str(value))
                 if sig not in seen:
                     idx = len(seen)
                     seen[sig] = {
@@ -96,6 +109,8 @@ class ProcessRecorder:
                         "label": _default_label(key),
                         "type": var_type,
                         "default": value,
+                        "step_tool": tool,
+                        "step_num": step_idx + 1,
                         "refs": [],
                     }
                 seen[sig]["refs"].append((step_idx, key))
@@ -115,7 +130,10 @@ class ProcessRecorder:
                 else:
                     seen[sig]["refs"].append((step_idx, "code"))
 
-        return list(seen.values())
+        # Return in step order (first reference of each variable)
+        all_vars = list(seen.values())
+        all_vars.sort(key=lambda v: v["refs"][0][0] if v["refs"] else 9999)
+        return all_vars
 
     def build_process_dict(self, name, description, folder, variables):
         """
@@ -175,6 +193,12 @@ def _infer_type(param_key):
         return "file"
     if key in _CRS_PARAMS:
         return "crs"
+    if key in _COLOR_PARAMS:
+        return "color"
+    if key in _NUMBER_PARAMS:
+        return "number"
+    if key in _BOOL_PARAMS:
+        return "boolean"
     if key in _VALUE_PARAMS:
         return "value"
     if key.endswith("_layer") or ("layer" in key and key.endswith("_name")):
@@ -183,6 +207,10 @@ def _infer_type(param_key):
         return "field"
     if key.endswith("_path") or key.endswith("_file"):
         return "file"
+    if key.endswith("_color"):
+        return "color"
+    if key.endswith(("_opacity", "_size", "_width", "_distance", "_radius")):
+        return "number"
     return None
 
 

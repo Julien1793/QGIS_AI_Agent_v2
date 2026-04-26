@@ -36,14 +36,17 @@ from ..core.process_runner import save_process, overwrite_process
 from ..utils.translation import get_translations
 
 
-_VAR_TYPES = ["layer", "field", "file", "crs", "value", "code"]
+_VAR_TYPES = ["layer", "field", "file", "crs", "color", "number", "boolean", "value", "code"]
 _VAR_TYPE_KEYS = {
-    "layer": "process_vartype_layer",
-    "field": "process_vartype_field",
-    "file":  "process_vartype_file",
-    "crs":   "process_vartype_crs",
-    "value": "process_vartype_value",
-    "code":  "process_vartype_code",
+    "layer":   "process_vartype_layer",
+    "field":   "process_vartype_field",
+    "file":    "process_vartype_file",
+    "crs":     "process_vartype_crs",
+    "color":   "process_vartype_color",
+    "number":  "process_vartype_number",
+    "boolean": "process_vartype_boolean",
+    "value":   "process_vartype_value",
+    "code":    "process_vartype_code",
 }
 
 
@@ -124,6 +127,15 @@ class ProcessSaveDialog(QDialog):
                 step["code"] = code_val
 
             self._steps.append(step)
+
+        # Derive step_tool / step_num from refs for variables that don't have
+        # them saved (processes recorded with older code versions).
+        for var in self._variables:
+            if var.get("refs") and not var.get("step_tool"):
+                si, _pk = var["refs"][0]
+                if si < len(self._steps):
+                    var["step_tool"] = self._steps[si].get("tool", "")
+                    var["step_num"] = si + 1
 
     # ──────────────────────────────────────────────────────────
     # UI construction
@@ -211,18 +223,21 @@ class ProcessSaveDialog(QDialog):
         note.setWordWrap(True)
         layout.addWidget(note)
 
-        self._var_table = QTableWidget(0, 4)
+        self._var_table = QTableWidget(0, 5)
         self._var_table.setHorizontalHeaderLabels([
+            t["process_vars_col_step"],
             t["process_vars_col_id"],
             t["process_vars_col_label"],
             t["process_vars_col_type"],
             t["process_vars_col_default"],
         ])
-        self._var_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
-        self._var_table.horizontalHeader().setSectionResizeMode(3, QHeaderView.Stretch)
-        self._var_table.setColumnWidth(0, 110)
-        self._var_table.setColumnWidth(2, 110)
+        self._var_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeToContents)
+        self._var_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.Stretch)
+        self._var_table.horizontalHeader().setSectionResizeMode(4, QHeaderView.Stretch)
+        self._var_table.setColumnWidth(1, 100)
+        self._var_table.setColumnWidth(3, 100)
         self._var_table.verticalHeader().setVisible(False)
+        self._var_table.setWordWrap(False)
         layout.addWidget(self._var_table)
 
         add_btn = QPushButton(t["process_vars_add_btn"])
@@ -281,24 +296,54 @@ class ProcessSaveDialog(QDialog):
         row = self._var_table.rowCount()
         self._var_table.insertRow(row)
 
+        # Col 0 — step context: "N · tool_name (param)"
+        refs = var.get("refs", [])
+        if refs:
+            step_idx, param_key = refs[0]
+            tool_name = ""
+            if step_idx < len(self._steps):
+                tool_name = self._steps[step_idx].get("tool", "")
+            short_tool = tool_name.replace("set_label_", "lbl·").replace("set_", "")
+            step_text = f"{step_idx + 1} · {short_tool}"
+            if len(refs) > 1:
+                step_text += f" (+{len(refs) - 1})"
+            tooltip = "\n".join(
+                f"Étape {si + 1} — {self._steps[si].get('tool', '?')} [{pk}]"
+                for si, pk in refs
+                if si < len(self._steps)
+            )
+        else:
+            step_text = "—"
+            tooltip = ""
+        step_item = QTableWidgetItem(step_text)
+        step_item.setFlags(step_item.flags() & ~Qt.ItemIsEditable)
+        step_item.setToolTip(tooltip)
+        from qgis.PyQt.QtGui import QColor as _QColor
+        step_item.setForeground(_QColor("#4a90d9"))
+        self._var_table.setItem(row, 0, step_item)
+
+        # Col 1 — variable ID (read-only, carries the full var dict)
         id_item = QTableWidgetItem(var.get("id", ""))
         id_item.setFlags(id_item.flags() & ~Qt.ItemIsEditable)
         id_item.setData(Qt.UserRole, var)
-        self._var_table.setItem(row, 0, id_item)
+        self._var_table.setItem(row, 1, id_item)
 
+        # Col 2 — editable user label
         label_item = QTableWidgetItem(var.get("label", ""))
-        self._var_table.setItem(row, 1, label_item)
+        self._var_table.setItem(row, 2, label_item)
 
+        # Col 3 — type selector
         type_combo = QComboBox()
         for vt in _VAR_TYPES:
-            type_combo.addItem(t.get(_VAR_TYPE_KEYS[vt], vt), vt)
+            type_combo.addItem(t.get(_VAR_TYPE_KEYS.get(vt, vt), vt), vt)
         current_type = var.get("type", "value")
-        idx = _VAR_TYPES.index(current_type) if current_type in _VAR_TYPES else 4
+        idx = _VAR_TYPES.index(current_type) if current_type in _VAR_TYPES else _VAR_TYPES.index("value")
         type_combo.setCurrentIndex(idx)
-        self._var_table.setCellWidget(row, 2, type_combo)
+        self._var_table.setCellWidget(row, 3, type_combo)
 
+        # Col 4 — default value
         default_item = QTableWidgetItem(str(var.get("default", "")))
-        self._var_table.setItem(row, 3, default_item)
+        self._var_table.setItem(row, 4, default_item)
 
     def _populate_steps(self):
         t = self._t
@@ -410,7 +455,7 @@ class ProcessSaveDialog(QDialog):
             self._var_table.removeRow(row)
 
     def _delete_step(self, step_idx: int):
-        """Remove a step and shift variable refs accordingly."""
+        """Remove a step, shift variable refs, and auto-remove orphaned variables."""
         self._sync_code_editors()
 
         for var in self._variables:
@@ -425,7 +470,26 @@ class ProcessSaveDialog(QDialog):
             var["refs"] = new_refs
 
         del self._steps[step_idx]
+
+        # Remove variables whose refs are now empty (belonged only to this step)
+        before = len(self._variables)
+        self._variables = [v for v in self._variables if v.get("refs")]
+        removed = before - len(self._variables)
+
         self._populate_steps()
+        self._populate_variables()
+
+        if removed:
+            from qgis.PyQt.QtWidgets import QMessageBox
+            msg = self._t.get(
+                "process_step_deleted_vars",
+                "{n} variable(s) supprimée(s) car elles n'étaient utilisées que par cette étape.",
+            ).replace("{n}", str(removed))
+            QMessageBox.information(
+                self,
+                self._t.get("process_step_deleted_title", "Étape supprimée"),
+                msg,
+            )
 
     def _sync_code_editors(self):
         """Flush code editor content back into steps and their variable defaults in the table."""
@@ -436,13 +500,13 @@ class ProcessSaveDialog(QDialog):
             self._steps[step_idx]["code"] = code
             # Also update the variable default cell so _collect_variables picks up the edit.
             for row in range(self._var_table.rowCount()):
-                id_item = self._var_table.item(row, 0)
+                id_item = self._var_table.item(row, 1)  # col 1 = ID
                 if not id_item:
                     continue
                 orig = id_item.data(Qt.UserRole) or {}
                 if any(si == step_idx and pk == "code"
                        for si, pk in orig.get("refs", [])):
-                    default_item = self._var_table.item(row, 3)
+                    default_item = self._var_table.item(row, 4)  # col 4 = default
                     if default_item:
                         default_item.setText(code)
                     break
@@ -523,16 +587,16 @@ class ProcessSaveDialog(QDialog):
         """Read back variable rows from the table into a list of dicts."""
         variables = []
         for row in range(self._var_table.rowCount()):
-            id_item = self._var_table.item(row, 0)
+            id_item = self._var_table.item(row, 1)   # col 1 = ID
             if not id_item:
                 continue
             orig = id_item.data(Qt.UserRole) or {}
             var_id = id_item.text()
-            label_item = self._var_table.item(row, 1)
+            label_item = self._var_table.item(row, 2)   # col 2 = label
             label = label_item.text() if label_item else var_id
-            type_combo = self._var_table.cellWidget(row, 2)
+            type_combo = self._var_table.cellWidget(row, 3)  # col 3 = type
             var_type = type_combo.currentData() if type_combo else "value"
-            default_item = self._var_table.item(row, 3)
+            default_item = self._var_table.item(row, 4)  # col 4 = default
             default = default_item.text() if default_item else ""
             variables.append({
                 "id": var_id,
