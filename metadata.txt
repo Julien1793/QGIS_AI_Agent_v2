@@ -1,7 +1,7 @@
 [general]
 name=AI Assistant QGIS
 qgisMinimumVersion=3.44
-description=An AI assistant plugin for generating and executing PyQGIS code using natural language prompts.
+description=AI-powered QGIS assistant that interprets natural language prompts to generate and execute PyQGIS code. Features a chat mode and an agentic mode with 75 built-in GIS tools (geoprocessing, styling, field management, export, and more). Supports local models (LM Studio, Ollama) and remote APIs (OpenAI, OpenRouter, Fireworks). Bilingual French/English interface.
 version=0.1.0
 author=Julien1793
 email=julien1793.github@gmail.com
