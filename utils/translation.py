@@ -27,7 +27,6 @@ def get_translations(lang):
             "review_title": "Vérifier et exécuter",
             "code_preview": "Aperçu du code (modifiable avant exécution)",
             "run_now": "Lancer",
-            "project_snapshot_intro": "Voici l'état du projet QGIS de l'utilisateur :",
             "help": "? Aide",
             "reset": "Réinitialiser",
             "reset_confirm": "Réinitialiser tous les réglages du plugin ?\n(Cela n'efface pas vos projets QGIS.)",
@@ -36,18 +35,6 @@ def get_translations(lang):
             "assistant_prefix": "Assistant",
             "warnings": "Avertissements",
             "no_warnings": "Aucun avertissement détecté.",
-            "warn_fix_header": "Le script s'est exécuté mais avec des avertissements.",
-            "warn_fix_instruction": (
-                "Analyse et corrige le code pour supprimer ces avertissements, "
-                "sans changer l'intention ni le comportement attendu. "
-                "Renvoie UNIQUEMENT du code PyQGIS exécutable et n'oublie pas les imports."
-            ),
-            "error_fix_header": "Corrige le code PyQGIS ci-dessous pour résoudre l'erreur.",
-            "error_fix_instruction": (
-                "Conserve autant que possible le comportement et les attentes demandées à l'origine. "
-                "Renvoie UNIQUEMENT du code PyQGIS exécutable et n'oublie pas les imports."
-            ),
-            "code_to_fix": "Voici le code à corriger",
             "exec_error_title": "Erreur d'exécution",
             "exec_success": "Exécution réussie.",
             "exec_warn_to_debug": "Exécution terminée avec avertissements — ouverture de l'onglet Debug.",

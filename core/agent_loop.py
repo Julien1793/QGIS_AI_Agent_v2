@@ -190,7 +190,7 @@ class AgentLoop:
 
                 # Meta-tool: expand the tool set mid-loop without calling a QGIS handler.
                 if tool_name == "request_additional_tools":
-                    result = self._expand_tools(tool_args, tools, t)
+                    result = self._expand_tools(tool_args, tools)
                 else:
                     # Delegate to the external tool_executor (main thread) if provided, otherwise run locally.
                     _execute = tool_executor or self._execute_tool
@@ -402,7 +402,7 @@ class AgentLoop:
     # Expansion dynamique des tools mid-loop
     # ══════════════════════════════════════════════════════════
 
-    def _expand_tools(self, args: dict, tools: list, t: dict) -> dict:
+    def _expand_tools(self, args: dict, tools: list) -> dict:
         """Inject additional tool schemas into the live tools list based on requested intents."""
         valid_intents = {
             "read", "stats", "process", "join", "select",
@@ -411,7 +411,7 @@ class AgentLoop:
         requested = [i for i in args.get("intents", []) if i in valid_intents]
         if not requested:
             return {"success": False, "tool": "request_additional_tools",
-                    "error": "Aucun intent valide fourni."}
+                    "error": "No valid intent provided."}
 
         existing_names = {s["function"]["name"] for s in tools}
         canvas_enabled = self.settings.get_canvas_capture_enabled()
@@ -518,7 +518,7 @@ class AgentLoop:
         if tool == "request_additional_tools":
             added = result.get("added_tools", [])
             return t["agent_result_tools_expanded"].format(
-                tools=", ".join(added) if added else "aucun nouveau")
+                tools=", ".join(added) if added else t["agent_no_new_tools"])
 
         # Canvas screenshot.
         if tool == "capture_map_canvas":
