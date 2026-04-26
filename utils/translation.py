@@ -59,7 +59,7 @@ def get_translations(lang):
             "streaming_not_supported": "Le serveur ne supporte pas le streaming ; retour au mode normal.",
             "request_error_title": "Erreur de requête",
             "request_error_body": "Une erreur est survenue côté modèle : {err}",
-            "context_chat": "Contexte envoyé à la prochaine requête",
+            "context_chat": "Tokens consommés par cette requête",
             "context_last_messages_chat": "(derniers {count} messages)",
 
             # ═══════════════════════════════════════════════════
@@ -121,11 +121,12 @@ def get_translations(lang):
 
             # Jauge contexte
             "context_usage_label": "Prompt",
+            "gauge_tooltip": "Taux de remplissage de la fenêtre de contexte — tokens envoyés au modèle lors du dernier appel (historique, contexte projet, résultats des tools).",
             "agent_context_warning": "⚠ Fenêtre de contexte presque pleine ({used} / {max} tokens)",
             "agent_context_overflow": "⛔ Fenêtre de contexte saturée ({used} / {max} tokens) — la réponse risque d'être tronquée",
 
             # Options
-            "language": "Langue de réponse :",
+            "language": "Langue de l'interface :",
             "api_key": "Clé API :",
             "url": "URL de l'API :",
             "test": "Tester l'URL",
@@ -309,7 +310,7 @@ def get_translations(lang):
             "streaming_not_supported": "Server does not support streaming; falling back to normal mode.",
             "request_error_title": "Request error",
             "request_error_body": "An error occurred from the model: {err}",
-            "context_chat": "Context sent on next request",
+            "context_chat": "Tokens consumed by this request",
             "context_last_messages_chat": "(last {count} messages)",
 
             # ═══════════════════════════════════════════════════
@@ -372,6 +373,7 @@ def get_translations(lang):
 
             # Context gauge
             "context_usage_label": "Prompt",
+            "gauge_tooltip": "Context window usage — tokens sent to the model on the last call (history, project context and tool results).",
             "agent_context_warning": "⚠ Context window filling up ({used} / {max} tokens)",
             "agent_context_overflow": "⛔ Context window nearly full ({used} / {max} tokens) — response may be truncated",
 
@@ -435,7 +437,7 @@ def get_translations(lang):
             ),
 
             # Options
-            "language": "Assistant language:",
+            "language": "Interface language:",
             "api_key": "API Key:",
             "url": "API URL:",
             "test": "Test URL",

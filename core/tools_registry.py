@@ -246,6 +246,11 @@ REGISTRY = {
                             "description": "Segments per quarter circle. More = smoother. Default 5.",
                             "default": 5,
                         },
+                        "end_cap_style": {
+                            "type": "integer",
+                            "description": "End cap style for lines: 0=Round (default), 1=Flat, 2=Square. Use Flat or Square for roads, rivers, linear features.",
+                            "default": 0,
+                        },
                         "output_layer_name": {
                             "type": "string",
                             "description": "Name of the result layer. Ex: 'buffer_roads_500m'.",
@@ -397,6 +402,11 @@ REGISTRY = {
                             "items": {"type": "integer"},
                             "description": "Spatial predicates: [0]=intersects, [1]=contains, [6]=within. Default [0].",
                             "default": [0],
+                        },
+                        "method": {
+                            "type": "integer",
+                            "description": "Join method: 0=one result per match (can create duplicates), 1=first match only, 2=largest overlap (recommended for polygon-on-polygon joins). Default 0.",
+                            "default": 0,
                         },
                         "join_fields": {
                             "type": "array",
@@ -783,7 +793,7 @@ REGISTRY = {
             "function": {
                 "name": "run_processing_algorithm",
                 "description": (
-                    "Generic fallback: runs ANY QGIS Processing algorithm by its full identifier. "
+                    "Generic fallback: runs a QGIS Processing algorithm and adds the result layer to the project. "
                     "Use ONLY when no specific tool covers the need. "
                     "ALWAYS call get_algorithm_info first to get exact parameter names and types. "
                     "Pass layer names as plain strings in parameters — they are resolved to layer "
@@ -2138,6 +2148,8 @@ REGISTRY = {
                     "Calculates or updates an existing field using a QGIS expression. "
                     "Possible expressions: '\"area\" * 2', 'length($geometry)', "
                     "'area($geometry)', 'concat(\"first\", \\' \\', \"last\")'. "
+                    "To add area, length or perimeter to a layer: first create the field with add_field, "
+                    "then use 'area($geometry)', 'length($geometry)', or '$perimeter' as the expression. "
                     "The field must exist — use add_field first if needed."
                 ),
                 "parameters": {
@@ -2469,30 +2481,6 @@ REGISTRY = {
                         },
                     },
                     "required": ["layer_name", "field_a", "field_b"],
-                },
-            },
-        },
-    },
-
-    "calculate_geometry": {
-        "intents": ["field"],
-        "handler": "calculate_geometry",
-        "schema": {
-            "type": "function",
-            "function": {
-                "name": "calculate_geometry",
-                "description": (
-                    "Calculates geometric attributes (area, perimeter, length, coordinates) "
-                    "and adds them as new fields in a layer. "
-                    "Use for 'add the area', 'compute areas', 'add length'."
-                ),
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "layer_name": {"type": "string"},
-                        "output_layer_name": {"type": "string"},
-                    },
-                    "required": ["layer_name", "output_layer_name"],
                 },
             },
         },

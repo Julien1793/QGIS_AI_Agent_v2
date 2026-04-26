@@ -1629,6 +1629,7 @@ class MainDock(QDockWidget):
             f"<b>{self.t['token_count']} :</b> {self.total_tokens_used}"
             + ctx_part
         )
+        self.status_label.setToolTip(self.t.get("gauge_tooltip", "") if ctx_part else "")
 
     @staticmethod
     def _clean_for_llm(content: str) -> str:

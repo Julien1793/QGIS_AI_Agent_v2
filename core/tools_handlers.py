@@ -227,6 +227,7 @@ def _run_algo(tool_name: str, algorithm: str, params: dict,
 
 def buffer(layer_name: str, distance: float,
            dissolve: bool = False, segments: int = 5,
+           end_cap_style: int = 0,
            output_layer_name: str = "buffer_result") -> dict:
     layer = _get_layer(layer_name)
     if not layer:
@@ -236,7 +237,7 @@ def buffer(layer_name: str, distance: float,
         "INPUT": layer,
         "DISTANCE": distance,
         "SEGMENTS": segments,
-        "END_CAP_STYLE": 0,
+        "END_CAP_STYLE": end_cap_style,
         "JOIN_STYLE": 0,
         "MITER_LIMIT": 2,
         "DISSOLVE": dissolve,
@@ -558,10 +559,23 @@ def run_processing_algorithm(algorithm: str,
     resolved["OUTPUT"] = "memory:"
     try:
         result = processing.run(algorithm, resolved)
+        from qgis.core import QgsMapLayer
         out = result.get("OUTPUT")
         if out is None:
-            return _err("run_processing_algorithm",
-                        f"No OUTPUT layer returned by {algorithm}")
+            for v in result.values():
+                if isinstance(v, QgsMapLayer):
+                    out = v
+                    break
+        if out is None:
+            raw = {
+                k: (str(v) if not isinstance(v, (str, int, float, bool, list, dict)) else v)
+                for k, v in result.items()
+                if v is not None and not isinstance(v, QgsMapLayer)
+            }
+            return _ok("run_processing_algorithm",
+                       algorithm=algorithm,
+                       note="Algorithm produced no output layer.",
+                       results=raw)
         out.setName(output_layer_name)
         QgsProject.instance().addMapLayer(out)
         return _ok("run_processing_algorithm",
@@ -569,8 +583,9 @@ def run_processing_algorithm(algorithm: str,
                    output_layer=output_layer_name,
                    feature_count_out=out.featureCount(),
                    added_to_project=True)
-    except Exception:
-        return _err("run_processing_algorithm", traceback.format_exc())
+    except Exception as e:
+        msg = str(e).strip() or traceback.format_exc().strip().splitlines()[-1]
+        return _err("run_processing_algorithm", f"{algorithm}: {msg}")
 
 
 # ══════════════════════════════════════════════════════════════
@@ -1648,18 +1663,6 @@ def get_field_correlation(layer_name: str, field_a: str, field_b: str) -> dict:
                    "moderate negative" if r > -0.7 else
                    "strong negative"
                ))
-
-
-def calculate_geometry(layer_name: str,
-                       output_layer_name: str = "geometry_calculated") -> dict:
-    """Compute area, length, and perimeter and add them as new fields."""
-    import processing
-    layer = _get_layer(layer_name)
-    if not layer:
-        return _err("calculate_geometry", f"Layer not found: {layer_name}")
-    return _run_algo("calculate_geometry", "native:addgeometryattributes",
-                     {"INPUT": layer, "CALC_METHOD": 0},
-                     output_layer_name)
 
 
 def check_geometry_validity(layer_name: str) -> dict:

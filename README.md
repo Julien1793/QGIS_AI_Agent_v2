@@ -56,7 +56,7 @@ Two modes are available:
 - **Multi-backend LLM support**: LM Studio, Ollama, OpenAI, OpenRouter, Fireworks, on-premise LLM servers, any OpenAI-compatible endpoint
 - **SSE streaming** with graceful fallback to batch response
 - **Project context injection**: current layer names, geometry types, and CRS are automatically included per request; field schemas are fetched on demand via `get_layer_fields`
-- **Prompt token gauge**: live status bar indicator showing estimated input tokens for the next request vs. the configured context window limit
+- **Prompt token gauge**: live status bar indicator showing tokens consumed by the current request vs. the configured context window limit
 - **Process recording and replay**: save agent runs as `.aiprocess.json` templates with variable substitution
 - Real-time step visualization in the chat panel
 
