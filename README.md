@@ -31,6 +31,7 @@
 - [Usage](#usage)
   - [Chat mode](#chat-mode-1)
   - [Agent mode](#agent-mode)
+  - [Human-in-the-loop (tool approval)](#human-in-the-loop-tool-approval)
   - [Process recording and replay](#process-recording-and-replay)
 - [Architecture](#architecture)
   - [Core modules](#core-modules)
@@ -59,7 +60,7 @@ Two modes are available:
 
 ## Features
 
-### Agent Mode (75 native GIS tools)
+### Agent Mode (76 native GIS tools)
 
 | Intent | Tools |
 |---|---|
@@ -70,7 +71,7 @@ Two modes are available:
 | **select** | `select_by_expression`, `select_by_location`, `set_layer_filter`, `clear_selection`, `invert_selection` |
 | **style** | `set_single_symbol`, `set_categorized_style`, `set_graduated_style`, `set_proportional_symbols`, `set_rule_based_style`, `set_custom_categorized_colors`, `set_symbol_properties`, `set_marker_shape`, `set_layer_opacity`, `set_layer_blending_mode`, `get_layer_style` |
 | **label** | `get_label_settings`, `enable_labels`, `disable_labels`, `set_label_text_format`, `set_label_buffer`, `set_label_placement`, `set_label_expression`, `set_label_shadow`, `set_label_background`, `set_label_callout` |
-| **field** | `add_field`, `delete_field`, `rename_field`, `calculate_field`, `calculate_geometry` |
+| **field** | `add_field`, `delete_field`, `delete_fields`, `rename_field`, `calculate_field`, `calculate_geometry` |
 | **layer** | `load_layer`, `rename_layer`, `remove_layer`, `export_layer`, `set_layer_visibility`, `set_scale_based_visibility` |
 | **view** | `zoom_to_layer`, `zoom_to_feature`, `refresh_canvas` |
 | **raster** | `get_raster_info`, `get_raster_statistics`, `set_raster_style` |
@@ -92,6 +93,7 @@ Two modes are available:
 - **Project context injection**: current layer names, geometry types, and CRS are automatically included per request; field schemas are fetched on demand via `get_layer_fields`
 - **Prompt token gauge**: live status bar indicator showing tokens consumed by the current request vs. the configured context window limit
 - **Process recording and replay**: save agent runs as `.aiprocess.json` templates with variable substitution
+- **Human-in-the-loop approval**: optional gate shown before each tool execution — approve, edit parameters, send feedback to the agent, or abort the run
 - Real-time step visualization in the chat panel
 
 ---
@@ -183,6 +185,7 @@ Open **Options** from the plugin panel to configure the connection.
 | Max iterations | Maximum tool-calling rounds per agent run before the loop is forced to stop |
 | Show steps in real time | Display each tool call and its result as intermediate steps in the chat panel |
 | Enable canvas capture (visual verification) | Allow the agent to screenshot the QGIS canvas to verify visual results after style or symbol changes |
+| Human control of tool calls | Before each tool execution, show a dialog to inspect and edit parameters, send feedback to the agent, or cancel the run |
 
 ### Tab: Interface
 
@@ -257,6 +260,21 @@ and export it as a GeoPackage to C:/output/large_buildings.gpkg.
 Apply a graduated style to the communes layer based on the population field,
 using 5 classes and a blue-to-red color ramp. Add labels showing the commune name.
 ```
+
+### Human-in-the-loop (tool approval)
+
+When **Human control of tool calls** is enabled in Options → Agent, a dialog appears before every tool execution. This gives you full control over what the agent does step by step.
+
+| Action | Effect |
+|---|---|
+| **Approve** | Execute this tool with the current parameters and continue asking for the next ones |
+| **Approve all** | Execute all remaining tools in this run without further prompts |
+| **Send feedback** | Skip execution and send your text to the agent as a tool error — the agent reads it and adapts its next step |
+| **Cancel task** | Abort the entire agent run immediately |
+
+Each parameter is presented as a typed input widget: checkboxes for booleans, spin boxes for numbers, a color picker for hex colors, and a full Python editor (with syntax highlighting) for code arguments such as those passed to `run_pyqgis_code`. You can edit any value before approving.
+
+This mode mirrors how Claude Code asks for permission before running shell commands — useful when working on production data or when you want to review and correct each step of a complex multi-tool task.
 
 ### Process recording and replay
 
