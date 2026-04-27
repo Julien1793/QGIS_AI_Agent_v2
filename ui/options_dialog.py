@@ -181,6 +181,10 @@ class OptionsDialog(QDialog):
         self.chk_canvas_capture.setChecked(self.settings.get_canvas_capture_enabled())
         tab_agent_layout.addWidget(self.chk_canvas_capture)
 
+        self.chk_agent_tool_approval = QCheckBox()
+        self.chk_agent_tool_approval.setChecked(self.settings.get_agent_tool_approval())
+        tab_agent_layout.addWidget(self.chk_agent_tool_approval)
+
         tab_agent_layout.addStretch()
         self.tab_widget.addTab(tab_agent, "")
 
@@ -334,6 +338,8 @@ class OptionsDialog(QDialog):
         self.chk_agent_show_steps.setToolTip(self.t.get("agent_show_steps_hint", ""))
         self.chk_canvas_capture.setText(self.t.get("canvas_capture_enabled", "Capture du canvas (vérification visuelle)"))
         self.chk_canvas_capture.setToolTip(self.t.get("canvas_capture_enabled_hint", ""))
+        self.chk_agent_tool_approval.setText(self.t.get("agent_tool_approval", "Contrôle humain des appels d'outils"))
+        self.chk_agent_tool_approval.setToolTip(self.t.get("agent_tool_approval_hint", ""))
         self.agent_tokens_label.setText(self.t.get("agent_max_tokens", "Tokens max (réponse) :"))
         self.agent_tokens_spin.setToolTip(self.t.get("agent_max_tokens_hint", ""))
         self.timeout_label.setText(self.t.get("request_timeout", "Timeout requête (s) :"))
@@ -450,6 +456,7 @@ class OptionsDialog(QDialog):
         self.settings.set_agent_max_iterations(int(self.agent_iter_spin.value()))
         self.settings.set_agent_show_steps(self.chk_agent_show_steps.isChecked())
         self.settings.set_canvas_capture_enabled(self.chk_canvas_capture.isChecked())
+        self.settings.set_agent_tool_approval(self.chk_agent_tool_approval.isChecked())
         self.settings.set_agent_max_tokens(int(self.agent_tokens_spin.value()))
         self.settings.set_request_timeout(int(self.timeout_spin.value()))
 

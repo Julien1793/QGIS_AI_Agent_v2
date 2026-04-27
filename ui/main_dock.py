@@ -8,9 +8,11 @@ from qgis.PyQt.QtWidgets import (QSplitter,
     QDockWidget, QWidget, QVBoxLayout, QHBoxLayout, QTextEdit,
     QPushButton, QTabWidget, QMessageBox, QLabel, QTextBrowser,
     QDialog, QPlainTextEdit, QDialogButtonBox, QApplication,
+    QFormLayout, QScrollArea, QLineEdit, QSpinBox, QDoubleSpinBox,
+    QCheckBox, QColorDialog,
 )
 from qgis.PyQt.QtCore import Qt, QCoreApplication, QRect, QSize, QThread, pyqtSlot
-from qgis.PyQt.QtGui import QTextCursor, QPixmap, QPainter, QTextFormat, QMovie
+from qgis.PyQt.QtGui import QTextCursor, QPixmap, QPainter, QTextFormat, QMovie, QColor
 
 try:
     from qgis.gui import QgsCodeEditorPython
@@ -157,6 +159,216 @@ class CodeReviewDialog(QDialog):
         return self.editor.toPlainText()
 
 
+class ToolApprovalDialog(QDialog):
+    """Human-in-the-loop dialog shown before each agent tool execution."""
+
+    APPROVE = 1
+    APPROVE_ALL = 2
+    FEEDBACK = 3
+    CANCEL = 0
+
+    def __init__(self, tool_name: str, tool_args: dict, t: dict, parent=None):
+        super().__init__(parent)
+        self._original_args = tool_args
+        self._widgets = {}  # key → (widget, original_value)
+        self.choice = self.CANCEL
+        self.feedback_text = ""
+
+        self.setWindowTitle(t.get("tool_approval_title", "Approve tool call"))
+        self.setMinimumWidth(520)
+
+        layout = QVBoxLayout(self)
+        layout.setSpacing(8)
+
+        about_label = QLabel(t.get("tool_approval_about_to_call", "The agent is about to run:"))
+        layout.addWidget(about_label)
+
+        tool_label = QLabel(f"<b>{html.escape(tool_name)}</b>")
+        layout.addWidget(tool_label)
+
+        sep = QWidget()
+        sep.setFixedHeight(1)
+        sep.setStyleSheet("background: #ddd;")
+        layout.addWidget(sep)
+
+        # ── Per-argument form ──
+        if tool_args:
+            form_widget = QWidget()
+            form = QFormLayout(form_widget)
+            form.setSpacing(4)
+            form.setLabelAlignment(Qt.AlignRight)
+            for key, value in tool_args.items():
+                widget = self._make_widget(value)
+                self._widgets[key] = (widget, value)
+                form.addRow(f"{key} :", widget)
+            scroll = QScrollArea()
+            scroll.setWidgetResizable(True)
+            scroll.setWidget(form_widget)
+            scroll.setMaximumHeight(260)
+            scroll.setFrameShape(QScrollArea.NoFrame)
+            layout.addWidget(scroll)
+        else:
+            layout.addWidget(QLabel("<i>—</i>"))
+
+        sep2 = QWidget()
+        sep2.setFixedHeight(1)
+        sep2.setStyleSheet("background: #ddd;")
+        layout.addWidget(sep2)
+
+        feedback_label = QLabel(t.get("tool_approval_feedback_label", "Your message to the agent (optional):"))
+        layout.addWidget(feedback_label)
+
+        self._feedback_edit = QTextEdit()
+        self._feedback_edit.setMaximumHeight(60)
+        self._feedback_edit.setPlaceholderText(
+            t.get("tool_approval_feedback_placeholder", "Describe an alternative, a correction, or a warning...")
+        )
+        layout.addWidget(self._feedback_edit)
+
+        btn_layout = QHBoxLayout()
+        approve_btn = QPushButton(t.get("tool_approval_btn_approve", "Approve"))
+        approve_all_btn = QPushButton(t.get("tool_approval_btn_approve_all", "Approve all"))
+        feedback_btn = QPushButton(t.get("tool_approval_btn_feedback", "Send feedback"))
+        cancel_btn = QPushButton(t.get("tool_approval_btn_cancel_loop", "Cancel task"))
+
+        approve_btn.setDefault(True)
+        cancel_btn.setStyleSheet("color: #c0392b;")
+
+        approve_btn.clicked.connect(self._on_approve)
+        approve_all_btn.clicked.connect(self._on_approve_all)
+        feedback_btn.clicked.connect(self._on_feedback)
+        cancel_btn.clicked.connect(self._on_cancel)
+
+        btn_layout.addWidget(approve_btn)
+        btn_layout.addWidget(approve_all_btn)
+        btn_layout.addWidget(feedback_btn)
+        btn_layout.addStretch()
+        btn_layout.addWidget(cancel_btn)
+        layout.addLayout(btn_layout)
+
+    # ── Widget factory (type-inferred from the Python value) ──────────────
+
+    def _make_widget(self, value) -> QWidget:
+        import re as _re
+        if isinstance(value, bool):
+            w = QCheckBox()
+            w.setChecked(value)
+            return w
+        if isinstance(value, int):
+            w = QSpinBox()
+            w.setRange(-2_000_000_000, 2_000_000_000)
+            w.setValue(value)
+            return w
+        if isinstance(value, float):
+            w = QDoubleSpinBox()
+            w.setRange(-1e12, 1e12)
+            w.setDecimals(4)
+            w.setStepType(QDoubleSpinBox.AdaptiveDecimalStepType)
+            w.setValue(value)
+            return w
+        str_val = str(value) if value is not None else ""
+        if _re.match(r"^#[0-9a-fA-F]{6}$", str_val):
+            return self._make_color_widget(str_val)
+        if isinstance(value, (list, dict)):
+            import json as _json
+            w = QLineEdit(_json.dumps(value, ensure_ascii=False))
+            return w
+        if "\n" in str_val or len(str_val) > 120:
+            return self._make_code_widget(str_val)
+        w = QLineEdit(str_val)
+        return w
+
+    def _make_code_widget(self, code: str) -> QWidget:
+        if HAS_QGIS_CODE_EDITOR:
+            w = QgsCodeEditorPython(self)
+            w.setText(code)
+            try:
+                w.setLineNumbersVisible(True)
+            except Exception:
+                pass
+            w._is_code_editor = True
+        else:
+            w = QPlainTextEdit(code)
+            w._is_code_editor = True
+        w.setMinimumHeight(160)
+        return w
+
+    def _make_color_widget(self, hex_color: str) -> QWidget:
+        container = QWidget()
+        row = QHBoxLayout(container)
+        row.setContentsMargins(0, 0, 0, 0)
+        btn = QPushButton()
+        btn.setFixedSize(80, 24)
+        qc = QColor(hex_color)
+        btn._color = qc
+        btn.setStyleSheet(f"background-color: {qc.name()}; border: 1px solid #888;")
+        lbl = QLabel(qc.name())
+        lbl.setStyleSheet("color: #666; font-size: 11px;")
+        def _pick(*_, b=btn, l=lbl):
+            c = QColorDialog.getColor(b._color, self)
+            if c.isValid():
+                b._color = c
+                b.setStyleSheet(f"background-color: {c.name()}; border: 1px solid #888;")
+                l.setText(c.name())
+        btn.clicked.connect(_pick)
+        row.addWidget(btn)
+        row.addWidget(lbl)
+        container._btn = btn
+        return container
+
+    # ── Value collection ──────────────────────────────────────────────────
+
+    def get_args(self) -> dict:
+        """Return args with user-edited values, preserving original types."""
+        import json as _json
+        result = {}
+        for key, (widget, original) in self._widgets.items():
+            if isinstance(original, bool) and isinstance(widget, QCheckBox):
+                result[key] = widget.isChecked()
+            elif isinstance(original, int) and isinstance(widget, QSpinBox):
+                result[key] = widget.value()
+            elif isinstance(original, float) and isinstance(widget, QDoubleSpinBox):
+                result[key] = widget.value()
+            elif hasattr(widget, "_btn") and hasattr(widget._btn, "_color"):
+                result[key] = widget._btn._color.name()
+            elif getattr(widget, "_is_code_editor", False):
+                if HAS_QGIS_CODE_EDITOR and isinstance(widget, QgsCodeEditorPython):
+                    result[key] = widget.text()
+                else:
+                    result[key] = widget.toPlainText()
+            elif isinstance(widget, QLineEdit):
+                text = widget.text()
+                if isinstance(original, (list, dict)):
+                    try:
+                        result[key] = _json.loads(text)
+                    except Exception:
+                        result[key] = original
+                else:
+                    result[key] = text
+            else:
+                result[key] = original
+        return result if result else self._original_args
+
+    # ── Button handlers ───────────────────────────────────────────────────
+
+    def _on_approve(self):
+        self.choice = self.APPROVE
+        self.accept()
+
+    def _on_approve_all(self):
+        self.choice = self.APPROVE_ALL
+        self.accept()
+
+    def _on_feedback(self):
+        self.feedback_text = self._feedback_edit.toPlainText().strip()
+        if not self.feedback_text:
+            return
+        self.choice = self.FEEDBACK
+        self.accept()
+
+    def _on_cancel(self):
+        self.choice = self.CANCEL
+        self.reject()
 
 
 class MainDock(QDockWidget):
@@ -808,6 +1020,7 @@ class MainDock(QDockWidget):
             for m in history_msgs
         ]
 
+        self._approve_all_tools = False
         self._agent_thread = QThread(self)
         self._agent_worker = AgentWorker(
             agent_loop=self.agent_loop,
@@ -830,10 +1043,38 @@ class MainDock(QDockWidget):
 
     @pyqtSlot(str, object)
     def _on_agent_tool_request(self, tool_name: str, args: object):
-        """Execute a QGIS tool on the main thread and post the result back to the worker."""
+        """Execute a QGIS tool on the main thread, with optional human approval gate."""
+        worker = getattr(self, "_agent_worker", None)
+
+        if (self.settings_manager.get_agent_tool_approval()
+                and not getattr(self, "_approve_all_tools", False)):
+            dlg = ToolApprovalDialog(tool_name, args, self.t, parent=self)
+            dlg.exec_()
+
+            if dlg.choice == ToolApprovalDialog.CANCEL:
+                if worker:
+                    worker.cancel()
+                return
+
+            if dlg.choice == ToolApprovalDialog.APPROVE_ALL:
+                self._approve_all_tools = True
+
+            if dlg.choice == ToolApprovalDialog.FEEDBACK:
+                feedback = dlg.feedback_text
+                result = {
+                    "success": False,
+                    "tool": tool_name,
+                    "error": f"[{self.t.get('tool_approval_btn_feedback', 'User feedback')}]: {feedback}",
+                }
+                if worker:
+                    worker.receive_tool_result(result)
+                return
+
+            args = dlg.get_args()
+
         result = self.agent_loop._execute_tool(tool_name, args)
-        if hasattr(self, "_agent_worker") and self._agent_worker:
-            self._agent_worker.receive_tool_result(result)
+        if worker:
+            worker.receive_tool_result(result)
 
     # -----------------------
     # Custom processes

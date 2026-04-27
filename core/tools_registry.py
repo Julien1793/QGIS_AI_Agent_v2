@@ -2036,9 +2036,11 @@ REGISTRY = {
             "function": {
                 "name": "delete_field",
                 "description": (
-                    "Permanently deletes a field from a vector layer. "
+                    "Permanently deletes a single field from a vector layer. "
                     "Use get_layer_fields first to confirm the exact field name. "
-                    "This operation cannot be undone."
+                    "This operation cannot be undone. "
+                    "WARNING: if you need to delete more than 2 fields, use delete_fields "
+                    "(batch) instead — calling this tool in a loop will freeze QGIS."
                 ),
                 "parameters": {
                     "type": "object",
@@ -2050,6 +2052,36 @@ REGISTRY = {
                         },
                     },
                     "required": ["layer_name", "field_name"],
+                },
+            },
+        },
+    },
+
+    "delete_fields": {
+        "intents": ["field"],
+        "handler": "delete_fields",
+        "schema": {
+            "type": "function",
+            "function": {
+                "name": "delete_fields",
+                "description": (
+                    "Permanently deletes multiple fields from a vector layer in a single "
+                    "edit cycle. Much faster and safer than calling delete_field in a loop. "
+                    "Use this whenever you need to delete 2 or more fields. "
+                    "Use get_layer_fields first to get the exact field names. "
+                    "This operation cannot be undone."
+                ),
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "layer_name": {"type": "string"},
+                        "field_names": {
+                            "type": "array",
+                            "items": {"type": "string"},
+                            "description": "List of exact field names to delete.",
+                        },
+                    },
+                    "required": ["layer_name", "field_names"],
                 },
             },
         },

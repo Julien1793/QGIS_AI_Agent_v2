@@ -102,7 +102,14 @@ def get_layer_fields(layer_name: str) -> dict:
         {"name": f.name(), "type": f.typeName(), "alias": f.alias()}
         for f in layer.fields()
     ]
-    return _ok("get_layer_fields", layer=layer_name, fields=fields, count=len(fields))
+    result = _ok("get_layer_fields", layer=layer_name, fields=fields, count=len(fields))
+    if len(fields) > 50:
+        result["warning"] = (
+            f"This layer has {len(fields)} fields. If you need to delete many fields, "
+            "use delete_fields (batch) instead of calling delete_field repeatedly — "
+            "calling delete_field in a loop on large field counts will freeze QGIS."
+        )
+    return result
 
 
 def get_layer_features(layer_name: str,
@@ -1347,6 +1354,35 @@ def delete_field(layer_name: str, field_name: str) -> dict:
     if not ok:
         return _err("delete_field", f"Cannot delete field: {field_name}")
     return _ok("delete_field", layer=layer_name, field=field_name)
+
+
+def delete_fields(layer_name: str, field_names: list) -> dict:
+    """Delete multiple fields from a vector layer in a single edit cycle."""
+    from qgis.core import QgsVectorLayer
+    layer = _get_layer(layer_name)
+    if not layer or not isinstance(layer, QgsVectorLayer):
+        return _err("delete_fields", f"Vector layer not found: {layer_name}")
+    indices = []
+    not_found = []
+    for name in field_names:
+        idx = layer.fields().indexFromName(name)
+        if idx == -1:
+            not_found.append(name)
+        else:
+            indices.append(idx)
+    if not indices:
+        return _err("delete_fields", f"None of the specified fields were found: {field_names}")
+    layer.startEditing()
+    ok = layer.deleteAttributes(indices)
+    layer.commitChanges()
+    if not ok:
+        return _err("delete_fields", "Failed to delete fields")
+    result = _ok("delete_fields", layer=layer_name,
+                 deleted=field_names if not not_found else [f for f in field_names if f not in not_found],
+                 deleted_count=len(indices))
+    if not_found:
+        result["warning"] = f"Fields not found (skipped): {not_found}"
+    return result
 
 
 def rename_field(layer_name: str, field_name: str, new_name: str) -> dict:

@@ -51,6 +51,7 @@ class AgentWorker(QObject):
         self.history_messages = history_messages or []
         self._tool_event = threading.Event()
         self._tool_result = None
+        self._cancelled = False
 
     @pyqtSlot()
     def run(self):
@@ -61,6 +62,8 @@ class AgentWorker(QObject):
             if not self._tool_event.wait(timeout=120):
                 return {"success": False, "tool": tool_name,
                         "error": "timeout: no response from main thread"}
+            if self._cancelled:
+                raise _UserCancelledError()
             return self._tool_result or {"success": False, "tool": tool_name,
                                          "error": "no result"}
 
@@ -73,6 +76,8 @@ class AgentWorker(QObject):
                 history_messages=self.history_messages,
             )
             self.finished.emit(final_text, tokens or 0)
+        except _UserCancelledError:
+            pass
         except Exception as e:
             import traceback
             traceback.print_exc()
@@ -82,6 +87,15 @@ class AgentWorker(QObject):
         """Appelé depuis le thread principal pour renvoyer le résultat d'un outil."""
         self._tool_result = result
         self._tool_event.set()
+
+    def cancel(self):
+        """Demandé depuis le thread principal : interrompt proprement le loop après l'outil en cours."""
+        self._cancelled = True
+        self._tool_event.set()
+
+
+class _UserCancelledError(Exception):
+    pass
 
 
 class StreamWorker(QObject):
