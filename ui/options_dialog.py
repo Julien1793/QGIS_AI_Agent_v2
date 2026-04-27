@@ -167,7 +167,7 @@ class OptionsDialog(QDialog):
         self.agent_iter_layout = QHBoxLayout()
         self.agent_iter_label = QLabel()
         self.agent_iter_spin = QSpinBox()
-        self.agent_iter_spin.setRange(1, 20)
+        self.agent_iter_spin.setRange(1, 100)
         self.agent_iter_spin.setValue(self.settings.get_agent_max_iterations())
         self.agent_iter_layout.addWidget(self.agent_iter_label)
         self.agent_iter_layout.addWidget(self.agent_iter_spin)
