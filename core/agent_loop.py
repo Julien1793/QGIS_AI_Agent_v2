@@ -116,6 +116,7 @@ class AgentLoop:
         # 6 — Agentic loop: LLM call → tool execution → tool result → next LLM call.
         total_tokens = 0
         ctx_max = self.settings.get_project_context_max_tokens()
+        _fail_count = 0  # consecutive batches containing a non-pyqgis failure
         # last_prompt_tokens: input size of the most recent LLM call — grows each iteration as tool results accumulate.
         # last_completion_tokens: output size of the most recent call = what gets added to history next turn.
         # Mid-loop: gauge shows last_prompt_tokens only (loop still running, no final response yet).
@@ -168,6 +169,7 @@ class AgentLoop:
             _emit_gauge(mid_loop=True)
             messages.append({"role": "assistant", **response})
 
+            batch_results = []
             for tool_call in response["tool_calls"]:
                 tool_name = tool_call["function"]["name"]
                 try:
@@ -195,6 +197,8 @@ class AgentLoop:
                     # Delegate to the external tool_executor (main thread) if provided, otherwise run locally.
                     _execute = tool_executor or self._execute_tool
                     result = _execute(tool_name, tool_args)
+
+                batch_results.append(result)
 
                 # Emit the tool result with a human-readable translated summary.
                 if result.get("success"):
@@ -231,6 +235,24 @@ class AgentLoop:
                             {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{b64}"}},
                         ],
                     })
+
+            # Update failure counter from this batch.
+            non_pyqgis_failures = [
+                r for r in batch_results
+                if not r.get("success") and r.get("tool") != "run_pyqgis_code"
+            ]
+            if non_pyqgis_failures:
+                _fail_count += 1
+            else:
+                _fail_count = 0
+
+            # Inject a soft reflection hint if signals warrant it.
+            checkpoint_msg, checkpoint_label = self._get_checkpoint_msg(
+                batch_results, _fail_count,
+            )
+            if checkpoint_msg:
+                messages.append({"role": "user", "content": checkpoint_msg})
+                self._emit(on_step, "checkpoint", checkpoint_label)
 
         # The agent hit the iteration cap without reaching a final answer.
         max_text = t["agent_step_max_iterations"].format(max=max_iter)
@@ -590,6 +612,63 @@ class AgentLoop:
 
         # Generic fallback for unlisted tools.
         return t["agent_result_generic"].format(tool=tool)
+
+    # ══════════════════════════════════════════════════════════
+    # Checkpoint de réflexion post-batch
+    # ══════════════════════════════════════════════════════════
+
+    def _get_checkpoint_msg(self, batch_results: list, fail_count: int):
+        """
+        Analyse les résultats d'un batch.
+        Retourne (message_to_inject, ui_label) ou (None, "") si rien à signaler.
+        """
+        parts = []
+        label = ""
+
+        # Cas 1 & 2 — failures non-pyqgis (avec escalade progressive).
+        if fail_count >= 2:
+            parts.append(
+                "Note: multiple consecutive tool failures. Your current approach may not be "
+                "the right one. Step back and consider whether a different set of tools or a "
+                "different strategy would better achieve the user's goal before continuing."
+            )
+            label = "Approach check: multiple failures"
+        elif fail_count == 1:
+            parts.append(
+                "Note: the last tool call failed. If this was a parameter issue "
+                "(wrong layer name, invalid expression syntax), fix and continue. "
+                "If you're uncertain your approach is correct, consider whether a "
+                "different tool or strategy would better achieve the goal."
+            )
+            label = "Approach check: last tool failed"
+
+        # Cas 3 & 4 — résultat vide sur un tool réussi.
+        for r in batch_results:
+            if not r.get("success"):
+                continue
+            if r.get("feature_count_out") == 0:
+                parts.append(
+                    "Note: the output layer contains 0 features. If this is unexpected, "
+                    "check your input parameters or expression — the operation may have "
+                    "filtered out everything. Consider whether a different approach would "
+                    "produce a meaningful result."
+                )
+                if not label:
+                    label = "Approach check: output is empty"
+                break
+            if r.get("selected_count") == 0:
+                parts.append(
+                    "Note: the selection matched 0 features. Verify that the expression "
+                    "targets the correct field and values. If unexpected, consider revising "
+                    "the expression or using a different selection strategy."
+                )
+                if not label:
+                    label = "Approach check: selection matched nothing"
+                break
+
+        if parts:
+            return "\n\n".join(parts), label
+        return None, ""
 
     # ══════════════════════════════════════════════════════════
     # Helpers

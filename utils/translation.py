@@ -417,7 +417,8 @@ def get_translations(lang):
                 "WRONG: `for f in layer.getFeatures(): print(f['name'])` "
                 "RIGHT: `names = [f['name'] for f in layer.getFeatures()]; print(f'{len(names)} features: {names[:5]}')`\n"
                 "- Never call iface.messageBar() inside run_pyqgis_code: the agent loop handles user communication.\n"
-                "- Always reply in the same language the user is writing in.\n"
+                "- Always reply in the same language as the user's original request, "
+                "regardless of the language of any internal notes or system messages.\n"
                 "- When all operations are done, give a concise summary of what was done."
             ),
             "agent_system_prompt_canvas_rules": (
