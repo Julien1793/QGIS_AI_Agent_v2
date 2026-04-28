@@ -1008,6 +1008,33 @@ class MainDock(QDockWidget):
             )
             _on_agent_finished(final_text, 0)
 
+        def _on_agent_cancelled():
+            cancelled_msg = self.t.get("agent_cancelled", "Request cancelled by user.")
+            cancelled_html = (
+                f'<p style="margin:4px 0;color:#c0392b;font-style:italic;">'
+                f'⛔ {html.escape(cancelled_msg)}</p>'
+            )
+            bubble = wrap_assistant(
+                body_html=cancelled_html,
+                label=self.t.get("assistant_prefix", "Assistant"),
+            )
+            try:
+                start, end = self._pending_ranges.pop(agent_range_key, (None, None))
+                if start is not None and end is not None:
+                    cur = self.conversation_view.textCursor()
+                    cur.setPosition(start)
+                    cur.setPosition(end, QTextCursor.KeepAnchor)
+                    cur.insertHtml(bubble)
+                    self.conversation_view.setTextCursor(cur)
+                    self.conversation_view.moveCursor(QTextCursor.End)
+                else:
+                    self.conversation_view.append(bubble)
+            except Exception:
+                self.conversation_view.append(bubble)
+            self._hide_spinner()
+            self.set_busy(False)
+            self._agent_thread.quit()
+
         # Fetch turns+1 to include the current turn, then drop the last user message
         # (it is injected by agent_loop directly as the current prompt)
         turns = max(0, int(self.history_turns))
@@ -1036,6 +1063,7 @@ class MainDock(QDockWidget):
         )
         self._agent_worker.finished.connect(_on_agent_finished, Qt.QueuedConnection)
         self._agent_worker.error_signal.connect(_on_agent_error, Qt.QueuedConnection)
+        self._agent_worker.cancelled_signal.connect(_on_agent_cancelled, Qt.QueuedConnection)
         self._agent_thread.started.connect(self._agent_worker.run)
         self._agent_thread.finished.connect(self._agent_thread.deleteLater)
 

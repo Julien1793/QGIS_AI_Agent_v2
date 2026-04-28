@@ -87,6 +87,7 @@ def get_translations(lang):
             "agent_step_iteration": "Étape limite {current}/{max}",
             "agent_step_final": "Synthèse de la réponse...",
             "agent_step_max_iterations": "Nombre maximum d'itérations atteint ({max}). Opération incomplète.",
+            "agent_cancelled": "Requête annulée par l'utilisateur.",
             "agent_no_new_tools":"aucun nouveau",
             "agent_summary_label": "Résumé de l'IA",
 
@@ -356,6 +357,7 @@ def get_translations(lang):
             "agent_step_iteration": "Limit step {current}/{max}",
             "agent_step_final": "Finalizing response...",
             "agent_step_max_iterations": "Maximum iterations reached ({max}). Operation incomplete.",
+            "agent_cancelled": "Request cancelled by user.",
             "agent_no_new_tools":"no new tools",
             "agent_summary_label": "AI Summary",
 

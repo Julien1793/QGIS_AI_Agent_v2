@@ -42,6 +42,7 @@ class AgentWorker(QObject):
     tool_request = pyqtSignal(str, object)
     finished = pyqtSignal(str, int)
     error_signal = pyqtSignal(str)
+    cancelled_signal = pyqtSignal()
 
     def __init__(self, agent_loop, user_prompt, snapshot_json, history_messages=None):
         super().__init__()
@@ -77,7 +78,7 @@ class AgentWorker(QObject):
             )
             self.finished.emit(final_text, tokens or 0)
         except _UserCancelledError:
-            pass
+            self.cancelled_signal.emit()
         except Exception as e:
             import traceback
             traceback.print_exc()
