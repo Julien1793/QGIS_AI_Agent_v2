@@ -30,6 +30,7 @@ except Exception:
     _HAS_CRS_WIDGET = False
 
 from ..core.process_runner import ProcessRunner, load_process
+from ..utils.translation import get_translations
 
 
 # ──────────────────────────────────────────────────────────────
@@ -82,9 +83,11 @@ class ProcessRunDialog(QDialog):
     Dialog to fill variable values and execute a saved custom process.
     """
 
-    def __init__(self, process_dict: dict, agent_loop, parent=None):
+    def __init__(self, process_dict: dict, agent_loop, language: str = "fr", parent=None):
         super().__init__(parent)
-        self.setWindowTitle(f"Traitement : {process_dict.get('name', 'Sans nom')}")
+        self._t = get_translations(language)
+        name = process_dict.get("name", self._t.get("process_fallback_name", "Untitled"))
+        self.setWindowTitle(self._t["process_run_dlg_title"].format(name=name))
         self.setMinimumSize(520, 480)
         self.process_dict = process_dict
         self.agent_loop = agent_loop

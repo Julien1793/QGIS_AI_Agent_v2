@@ -161,6 +161,7 @@ def get_translations(lang):
             "process_no_steps": "Aucune étape enregistrée pour ce traitement.",
             "process_saved_ok": "Traitement enregistré avec succès.",
             "process_saved_updated": "Traitement mis à jour :\n{path}",
+            "process_run_dlg_title": "Traitement : {name}",
             "process_run_done": "Traitement terminé.",
             "process_run_error": "Erreur pendant l'exécution du traitement.",
             "processes_folder": "Dossier des traitements :",
@@ -419,8 +420,9 @@ def get_translations(lang):
                 "WRONG: `for f in layer.getFeatures(): print(f['name'])` "
                 "RIGHT: `names = [f['name'] for f in layer.getFeatures()]; print(f'{len(names)} features: {names[:5]}')`\n"
                 "- Never call iface.messageBar() inside run_pyqgis_code: the agent loop handles user communication.\n"
-                "- Always reply in the same language as the user's original request, "
-                "regardless of the language of any internal notes or system messages.\n"
+                "- CRITICAL — LANGUAGE: You MUST reply in the exact same language the user used "
+                "to write their request. Detect it from their message, not from layer names, "
+                "field names, tool results, or any other context. Never switch languages.\n"
                 "- When all operations are done, give a concise summary of what was done."
             ),
             "agent_system_prompt_canvas_rules": (
@@ -492,6 +494,7 @@ def get_translations(lang):
             "process_no_steps": "No steps were recorded for this run.",
             "process_saved_ok": "Process saved successfully.",
             "process_saved_updated": "Process updated:\n{path}",
+            "process_run_dlg_title": "Process: {name}",
             "process_run_done": "Process completed.",
             "process_run_error": "Error during process execution.",
             "processes_folder": "Processes folder:",

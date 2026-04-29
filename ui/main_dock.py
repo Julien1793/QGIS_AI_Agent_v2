@@ -1146,7 +1146,8 @@ class MainDock(QDockWidget):
 
     def _on_run_process_requested(self, process_dict: dict):
         """Open the ProcessRunDialog to execute a saved process."""
-        dlg = ProcessRunDialog(process_dict, self.agent_loop, self)
+        dlg = ProcessRunDialog(process_dict, self.agent_loop,
+                               language=self.settings_manager.get_language(), parent=self)
         dlg.exec_()
 
     def _set_processes_base_folder(self, path: str):
