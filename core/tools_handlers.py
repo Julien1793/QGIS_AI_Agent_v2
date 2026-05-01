@@ -241,7 +241,7 @@ def _run_algo(tool_name: str, algorithm: str, params: dict,
 
 def buffer(layer_name: str, distance: float,
            dissolve: bool = False, segments: int = 5,
-           end_cap_style: int = 0,
+           end_cap_style: int = 0, join_style: int = 0,
            output_layer_name: str = "buffer_result") -> dict:
     layer = _get_layer(layer_name)
     if not layer:
@@ -252,7 +252,7 @@ def buffer(layer_name: str, distance: float,
         "DISTANCE": distance,
         "SEGMENTS": segments,
         "END_CAP_STYLE": end_cap_style,
-        "JOIN_STYLE": 0,
+        "JOIN_STYLE": join_style,
         "MITER_LIMIT": 2,
         "DISSOLVE": dissolve,
     }, output_layer_name)
@@ -275,24 +275,28 @@ def clip(layer_name: str, overlay_layer_name: str,
 
 
 def intersection(layer_name: str, overlay_layer_name: str,
+                 grid_size: float = None,
                  output_layer_name: str = "intersection_result") -> dict:
     layer = _get_layer(layer_name)
     overlay = _get_layer(overlay_layer_name)
     if not layer or not overlay:
         return _err("intersection", "Layer(s) not found")
-    return _run_algo("intersection", "native:intersection",
-                     {"INPUT": layer, "OVERLAY": overlay,
-                      "INPUT_FIELDS": [], "OVERLAY_FIELDS": []},
-                     output_layer_name)
+    params = {"INPUT": layer, "OVERLAY": overlay,
+              "INPUT_FIELDS": [], "OVERLAY_FIELDS": []}
+    if grid_size is not None:
+        params["GRID_SIZE"] = grid_size
+    return _run_algo("intersection", "native:intersection", params, output_layer_name)
 
 
 def dissolve(layer_name: str, field: str = "",
+             separate_disjoint: bool = False,
              output_layer_name: str = "dissolve_result") -> dict:
     layer = _get_layer(layer_name)
     if not layer:
         return _err("dissolve", f"Layer not found: {layer_name}")
     return _run_algo("dissolve", "native:dissolve",
-                     {"INPUT": layer, "FIELD": [field] if field else []},
+                     {"INPUT": layer, "FIELD": [field] if field else [],
+                      "SEPARATE_DISJOINT": separate_disjoint},
                      output_layer_name)
 
 
@@ -332,45 +336,51 @@ def join_by_location(layer_name: str, join_layer_name: str,
     }, output_layer_name)
 
 
-def centroids(layer_name: str,
+def centroids(layer_name: str, all_parts: bool = False,
               output_layer_name: str = "centroids_result") -> dict:
     layer = _get_layer(layer_name)
     if not layer:
         return _err("centroids", f"Layer not found: {layer_name}")
     return _run_algo("centroids", "native:centroids",
-                     {"INPUT": layer, "ALL_PARTS": False},
+                     {"INPUT": layer, "ALL_PARTS": all_parts},
                      output_layer_name)
 
 
 def difference(layer_name: str, overlay_layer_name: str,
+               grid_size: float = None,
                output_layer_name: str = "difference_result") -> dict:
     layer = _get_layer(layer_name)
     overlay = _get_layer(overlay_layer_name)
     if not layer or not overlay:
         return _err("difference", "Layer(s) not found")
-    return _run_algo("difference", "native:difference",
-                     {"INPUT": layer, "OVERLAY": overlay},
-                     output_layer_name)
+    params = {"INPUT": layer, "OVERLAY": overlay}
+    if grid_size is not None:
+        params["GRID_SIZE"] = grid_size
+    return _run_algo("difference", "native:difference", params, output_layer_name)
 
 
 def union(layer_name: str, overlay_layer_name: str,
+          overlay_fields_prefix: str = "",
+          grid_size: float = None,
           output_layer_name: str = "union_result") -> dict:
     layer = _get_layer(layer_name)
     overlay = _get_layer(overlay_layer_name)
     if not layer or not overlay:
         return _err("union", "Layer(s) not found")
-    return _run_algo("union", "native:union",
-                     {"INPUT": layer, "OVERLAY": overlay},
-                     output_layer_name)
+    params = {"INPUT": layer, "OVERLAY": overlay,
+              "OVERLAY_FIELDS_PREFIX": overlay_fields_prefix}
+    if grid_size is not None:
+        params["GRID_SIZE"] = grid_size
+    return _run_algo("union", "native:union", params, output_layer_name)
 
 
-def fix_geometries(layer_name: str,
+def fix_geometries(layer_name: str, method: int = 0,
                    output_layer_name: str = "fixed_geometries") -> dict:
     layer = _get_layer(layer_name)
     if not layer:
         return _err("fix_geometries", f"Layer not found: {layer_name}")
     return _run_algo("fix_geometries", "native:fixgeometries",
-                     {"INPUT": layer},
+                     {"INPUT": layer, "METHOD": method},
                      output_layer_name)
 
 
@@ -730,7 +740,7 @@ def get_layer_style(layer_name: str) -> dict:
     """Return the current renderer type and style information for a layer."""
     from qgis.core import (QgsVectorLayer, QgsSingleSymbolRenderer,
                            QgsCategorizedSymbolRenderer,
-                           QgsGraduatedSymbolRenderer)
+                           QgsGraduatedSymbolRenderer, QgsRuleBasedRenderer)
     layer = _get_layer(layer_name)
     if not layer or not isinstance(layer, QgsVectorLayer):
         return _err("get_layer_style", f"Vector layer not found: {layer_name}")
@@ -743,6 +753,14 @@ def get_layer_style(layer_name: str) -> dict:
         sym = renderer.symbol()
         info["color"] = sym.color().name() if sym else None
         info["opacity"] = sym.opacity() if sym else None
+        if sym and sym.symbolLayerCount() > 0:
+            sl = sym.symbolLayer(0)
+            if hasattr(sl, "size"):
+                info["size"] = sl.size()
+            if hasattr(sl, "strokeColor"):
+                info["stroke_color"] = sl.strokeColor().name()
+            if hasattr(sl, "strokeWidth"):
+                info["stroke_width"] = sl.strokeWidth()
     elif isinstance(renderer, QgsCategorizedSymbolRenderer):
         info["field"] = renderer.classAttribute()
         info["categories"] = [
@@ -753,6 +771,28 @@ def get_layer_style(layer_name: str) -> dict:
     elif isinstance(renderer, QgsGraduatedSymbolRenderer):
         info["field"] = renderer.classAttribute()
         info["range_count"] = len(renderer.ranges())
+        info["ranges"] = [
+            {"label": r.label(), "lower": r.lowerValue(),
+             "upper": r.upperValue(), "color": r.symbol().color().name()}
+            for r in renderer.ranges()
+        ]
+    elif isinstance(renderer, QgsRuleBasedRenderer):
+        rules_info = []
+        def _collect(rule):
+            if rule.symbol():
+                rules_info.append({
+                    "label": rule.label(),
+                    "expression": rule.filterExpression(),
+                    "color": rule.symbol().color().name(),
+                    "active": rule.active(),
+                    "scale_min": rule.minimumScale(),
+                    "scale_max": rule.maximumScale(),
+                })
+            for child in rule.children():
+                _collect(child)
+        _collect(renderer.rootRule())
+        info["rules"] = rules_info
+        info["rule_count"] = len(rules_info)
     return _ok("get_layer_style", layer=layer_name, **info)
 
 
@@ -802,10 +842,17 @@ def set_single_symbol(layer_name: str, color: str,
 
 
 def set_categorized_style(layer_name: str, field_name: str,
-                          color_ramp_name: str = "Spectral") -> dict:
+                          color_ramp_name: str = "Spectral",
+                          stroke_color: str = None,
+                          stroke_width: float = None,
+                          opacity: float = 1.0) -> dict:
     """Apply a categorized renderer based on a field, colours distributed across a ramp."""
     from qgis.core import (QgsVectorLayer, QgsCategorizedSymbolRenderer,
-                           QgsStyle, QgsRendererCategory, QgsSymbol)
+                           QgsStyle, QgsRendererCategory, QgsSymbol,
+                           QgsSimpleMarkerSymbolLayer, QgsSimpleFillSymbolLayer,
+                           QgsSimpleLineSymbolLayer)
+    from qgis.PyQt.QtGui import QColor
+    from qgis.PyQt.QtCore import Qt
     layer = _get_layer(layer_name)
     if not layer or not isinstance(layer, QgsVectorLayer):
         return _err("set_categorized_style",
@@ -830,6 +877,23 @@ def set_categorized_style(layer_name: str, field_name: str,
             color = ramp.color(t)
             symbol = QgsSymbol.defaultSymbol(layer.geometryType())
             symbol.setColor(color)
+            symbol.setOpacity(opacity)
+            for j in range(symbol.symbolLayerCount()):
+                sl = symbol.symbolLayer(j)
+                if stroke_color is not None:
+                    no_border = stroke_color.lower() == "none"
+                    if isinstance(sl, (QgsSimpleMarkerSymbolLayer, QgsSimpleFillSymbolLayer)):
+                        if no_border:
+                            sl.setStrokeStyle(Qt.NoPen)
+                        else:
+                            sl.setStrokeColor(QColor(stroke_color))
+                    elif isinstance(sl, QgsSimpleLineSymbolLayer):
+                        sl.setColor(QColor(stroke_color))
+                if stroke_width is not None:
+                    if hasattr(sl, "setStrokeWidth"):
+                        sl.setStrokeWidth(stroke_width)
+                    elif isinstance(sl, QgsSimpleLineSymbolLayer):
+                        sl.setWidth(stroke_width)
             categories.append(QgsRendererCategory(val, symbol, str(val)))
         renderer = QgsCategorizedSymbolRenderer(field_name, categories)
         layer.setRenderer(renderer)
@@ -868,10 +932,14 @@ def set_graduated_style(layer_name: str, field_name: str,
         renderer = QgsGraduatedSymbolRenderer(field_name)
         try:
             from qgis.core import (QgsClassificationEqualInterval,
-                                   QgsClassificationQuantile, QgsClassificationJenks)
+                                   QgsClassificationQuantile, QgsClassificationJenks,
+                                   QgsClassificationStandardDeviation,
+                                   QgsClassificationPrettyBreaks)
             _cls = {0: QgsClassificationQuantile,
                     1: QgsClassificationEqualInterval,
-                    2: QgsClassificationJenks}
+                    2: QgsClassificationJenks,
+                    3: QgsClassificationStandardDeviation,
+                    4: QgsClassificationPrettyBreaks}
             renderer.setClassificationMethod(_cls.get(mode, QgsClassificationEqualInterval)())
             renderer.updateClasses(layer, num_classes)
         except (ImportError, AttributeError, TypeError):
@@ -1087,14 +1155,22 @@ def set_marker_shape(layer_name: str, shape: str) -> dict:
         return _err("set_marker_shape", "This layer is not a Point layer")
 
     SHAPE_NAME_MAP = {
-        "circle":   "Circle",
-        "square":   "Square",
-        "diamond":  "Diamond",
-        "triangle": "Triangle",
-        "star":     "Star",
-        "cross":    "Cross",
-        "x":        "Cross2",
-        "arrow":    "Arrow",
+        "circle":         "Circle",
+        "square":         "Square",
+        "diamond":        "Diamond",
+        "triangle":       "Triangle",
+        "star":           "Star",
+        "cross":          "Cross",
+        "x":              "Cross2",
+        "arrow":          "Arrow",
+        "pentagon":       "Pentagon",
+        "hexagon":        "Hexagon",
+        "octagon":        "Octagon",
+        "rounded_square": "RoundedSquare",
+        "semi_circle":    "SemiCircle",
+        "quarter_circle": "QuarterCircle",
+        "heart":          "Heart",
+        "line":           "Line",
     }
     shape_attr = SHAPE_NAME_MAP.get(shape)
     if shape_attr is None:
@@ -1129,6 +1205,18 @@ def set_rule_based_style(layer_name: str, rules: list) -> dict:
                            QgsSimpleMarkerSymbolLayer, QgsSimpleLineSymbolLayer,
                            QgsSimpleFillSymbolLayer)
     from qgis.PyQt.QtGui import QColor
+    from qgis.PyQt.QtCore import Qt
+
+    STROKE_STYLE_MAP = {
+        "solid": Qt.SolidLine, "dash": Qt.DashLine, "dot": Qt.DotLine,
+        "dash_dot": Qt.DashDotLine, "no_line": Qt.NoPen,
+    }
+    FILL_STYLE_MAP = {
+        "solid": Qt.SolidPattern, "no_fill": Qt.NoBrush,
+        "horizontal": Qt.HorPattern, "vertical": Qt.VerPattern,
+        "cross": Qt.CrossPattern, "b_diagonal": Qt.BDiagPattern,
+        "f_diagonal": Qt.FDiagPattern, "diagonal_x": Qt.DiagCrossPattern,
+    }
 
     layer = _get_layer(layer_name)
     if not layer or not isinstance(layer, QgsVectorLayer):
@@ -1140,12 +1228,14 @@ def set_rule_based_style(layer_name: str, rules: list) -> dict:
         root_rule = QgsRuleBasedRenderer.Rule(None)
 
         for r in rules:
-            expression  = r.get("expression", "")
-            color       = r.get("color", "#888888")
-            label       = r.get("label", expression or "Default")
-            size        = r.get("size")
-            stroke_clr  = r.get("stroke_color")
-            stroke_w    = r.get("stroke_width")
+            expression   = r.get("expression", "")
+            color        = r.get("color", "#888888")
+            label        = r.get("label", expression or "Default")
+            size         = r.get("size")
+            stroke_clr   = r.get("stroke_color")
+            stroke_w     = r.get("stroke_width")
+            stroke_style = r.get("stroke_style")
+            fill_style   = r.get("fill_style")
 
             symbol = QgsSymbol.defaultSymbol(layer.geometryType())
             symbol.setColor(QColor(color))
@@ -1163,6 +1253,14 @@ def set_rule_based_style(layer_name: str, rules: list) -> dict:
                 if stroke_w is not None:
                     if hasattr(sl, "setStrokeWidth"):
                         sl.setStrokeWidth(stroke_w)
+                if stroke_style is not None:
+                    qt_style = STROKE_STYLE_MAP.get(stroke_style, Qt.SolidLine)
+                    if isinstance(sl, QgsSimpleLineSymbolLayer):
+                        sl.setPenStyle(qt_style)
+                    elif hasattr(sl, "setStrokeStyle"):
+                        sl.setStrokeStyle(qt_style)
+                if fill_style is not None and isinstance(sl, QgsSimpleFillSymbolLayer):
+                    sl.setBrushStyle(FILL_STYLE_MAP.get(fill_style, Qt.SolidPattern))
 
             rule = QgsRuleBasedRenderer.Rule(symbol)
             if expression:
@@ -1179,11 +1277,17 @@ def set_rule_based_style(layer_name: str, rules: list) -> dict:
 
 def set_custom_categorized_colors(layer_name: str, field_name: str,
                                    color_map: dict,
-                                   default_color: str = "#AAAAAA") -> dict:
+                                   default_color: str = "#AAAAAA",
+                                   stroke_color: str = None,
+                                   stroke_width: float = None,
+                                   opacity: float = 1.0) -> dict:
     """Apply a categorized renderer with precise per-value color control."""
     from qgis.core import (QgsVectorLayer, QgsCategorizedSymbolRenderer,
-                           QgsRendererCategory, QgsSymbol)
+                           QgsRendererCategory, QgsSymbol,
+                           QgsSimpleMarkerSymbolLayer, QgsSimpleFillSymbolLayer,
+                           QgsSimpleLineSymbolLayer)
     from qgis.PyQt.QtGui import QColor
+    from qgis.PyQt.QtCore import Qt
 
     layer = _get_layer(layer_name)
     if not layer or not isinstance(layer, QgsVectorLayer):
@@ -1201,6 +1305,23 @@ def set_custom_categorized_colors(layer_name: str, field_name: str,
             color = color_map.get(str(val), default_color)
             symbol = QgsSymbol.defaultSymbol(layer.geometryType())
             symbol.setColor(QColor(color))
+            symbol.setOpacity(opacity)
+            for j in range(symbol.symbolLayerCount()):
+                sl = symbol.symbolLayer(j)
+                if stroke_color is not None:
+                    no_border = stroke_color.lower() == "none"
+                    if isinstance(sl, (QgsSimpleMarkerSymbolLayer, QgsSimpleFillSymbolLayer)):
+                        if no_border:
+                            sl.setStrokeStyle(Qt.NoPen)
+                        else:
+                            sl.setStrokeColor(QColor(stroke_color))
+                    elif isinstance(sl, QgsSimpleLineSymbolLayer):
+                        sl.setColor(QColor(stroke_color))
+                if stroke_width is not None:
+                    if hasattr(sl, "setStrokeWidth"):
+                        sl.setStrokeWidth(stroke_width)
+                    elif isinstance(sl, QgsSimpleLineSymbolLayer):
+                        sl.setWidth(stroke_width)
             label = str(val) if val is not None else "NULL"
             categories.append(QgsRendererCategory(val, symbol, label))
 

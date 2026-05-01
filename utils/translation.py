@@ -443,7 +443,12 @@ def get_translations(lang):
                 "- CRITICAL — LANGUAGE: You MUST reply in the exact same language the user used "
                 "to write their request. Detect it from their message, not from layer names, "
                 "field names, tool results, or any other context. Never switch languages.\n"
-                "- When all operations are done, give a concise summary of what was done."
+                "- When all operations are done, give a concise summary of what was done. "
+                "Always mention the key non-obvious parameters that were applied with their values "
+                "(e.g. classification mode, number of classes, color ramp, buffer distance, dissolve=true/false, end cap style...). "
+                "Skip parameters that are self-evident from the user's request. "
+                "This lets the user see what defaults were used and refine their prompt if needed — "
+                "do NOT ask for confirmation beforehand, just act and report."
             ),
             "agent_system_prompt_canvas_rules": (
                 "- After applying any style, symbology, labels, or visual change to a layer, "

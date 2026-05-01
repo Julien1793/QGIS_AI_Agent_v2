@@ -251,6 +251,11 @@ REGISTRY = {
                             "description": "End cap style for lines: 0=Round (default), 1=Flat, 2=Square. Use Flat or Square for roads, rivers, linear features.",
                             "default": 0,
                         },
+                        "join_style": {
+                            "type": "integer",
+                            "description": "Join style for corners: 0=Round (default), 1=Miter, 2=Bevel. Miter gives sharp corners, Bevel cuts them flat.",
+                            "default": 0,
+                        },
                         "output_layer_name": {
                             "type": "string",
                             "description": "Name of the result layer. Ex: 'buffer_roads_500m'.",
@@ -309,6 +314,10 @@ REGISTRY = {
                     "properties": {
                         "layer_name": {"type": "string"},
                         "overlay_layer_name": {"type": "string"},
+                        "grid_size": {
+                            "type": "number",
+                            "description": "Snap grid size for topological precision (e.g. 0.001). Use when geometries have slight overlaps or precision issues causing errors. Leave unset for normal use.",
+                        },
                         "output_layer_name": {"type": "string"},
                     },
                     "required": ["layer_name", "overlay_layer_name", "output_layer_name"],
@@ -337,6 +346,11 @@ REGISTRY = {
                             "type": "string",
                             "description": "Grouping field. Leave empty to merge everything.",
                             "default": "",
+                        },
+                        "separate_disjoint": {
+                            "type": "boolean",
+                            "description": "True = keep spatially disjoint parts as separate output features instead of merging them into a single multi-geometry. Useful to avoid unwanted multi-polygons.",
+                            "default": False,
                         },
                         "output_layer_name": {"type": "string"},
                     },
@@ -447,6 +461,11 @@ REGISTRY = {
                     "type": "object",
                     "properties": {
                         "layer_name": {"type": "string"},
+                        "all_parts": {
+                            "type": "boolean",
+                            "description": "True = compute a centroid for each part of multi-part geometries (e.g. each island of a multi-polygon). False = one centroid per feature (default).",
+                            "default": False,
+                        },
                         "output_layer_name": {"type": "string"},
                     },
                     "required": ["layer_name", "output_layer_name"],
@@ -472,6 +491,10 @@ REGISTRY = {
                     "properties": {
                         "layer_name": {"type": "string"},
                         "overlay_layer_name": {"type": "string"},
+                        "grid_size": {
+                            "type": "number",
+                            "description": "Snap grid size for topological precision (e.g. 0.001). Use when geometries have slight overlaps or precision issues causing errors. Leave unset for normal use.",
+                        },
                         "output_layer_name": {"type": "string"},
                     },
                     "required": ["layer_name", "overlay_layer_name", "output_layer_name"],
@@ -496,6 +519,15 @@ REGISTRY = {
                     "properties": {
                         "layer_name": {"type": "string"},
                         "overlay_layer_name": {"type": "string"},
+                        "overlay_fields_prefix": {
+                            "type": "string",
+                            "description": "Prefix added to overlay field names to avoid name collisions. Ex: 'ov_'.",
+                            "default": "",
+                        },
+                        "grid_size": {
+                            "type": "number",
+                            "description": "Snap grid size for topological precision (e.g. 0.001). Use when geometries have slight overlaps or precision issues causing errors. Leave unset for normal use.",
+                        },
                         "output_layer_name": {"type": "string"},
                     },
                     "required": ["layer_name", "overlay_layer_name", "output_layer_name"],
@@ -519,6 +551,11 @@ REGISTRY = {
                     "type": "object",
                     "properties": {
                         "layer_name": {"type": "string"},
+                        "method": {
+                            "type": "integer",
+                            "description": "Repair method: 0=Linework (default, fast, handles most cases), 1=Structure (slower but more robust for complex invalid polygons).",
+                            "default": 0,
+                        },
                         "output_layer_name": {"type": "string"},
                     },
                     "required": ["layer_name", "output_layer_name"],
@@ -1105,6 +1142,19 @@ REGISTRY = {
                             "description": "QGIS colour ramp to distribute across categories. Ex: 'Spectral', 'Set1', 'Pastel1', 'Dark2', 'Paired', 'tab10'. Default 'Spectral'.",
                             "default": "Spectral",
                         },
+                        "stroke_color": {
+                            "type": "string",
+                            "description": "Border colour for all category symbols in hex. Default keeps QGIS default. Pass 'none' to remove borders.",
+                        },
+                        "stroke_width": {
+                            "type": "number",
+                            "description": "Border width in mm for all category symbols. Ex: 0.0 to remove, 0.5 for visible border.",
+                        },
+                        "opacity": {
+                            "type": "number",
+                            "description": "Symbol opacity from 0.0 (transparent) to 1.0 (opaque). Default 1.0.",
+                            "default": 1.0,
+                        },
                     },
                     "required": ["layer_name", "field_name"],
                 },
@@ -1144,7 +1194,7 @@ REGISTRY = {
                         },
                         "mode": {
                             "type": "integer",
-                            "description": "0=Quantile, 1=Equal intervals, 2=Natural breaks. Default 0.",
+                            "description": "0=Quantile, 1=Equal intervals, 2=Natural breaks (Jenks), 3=Standard deviation, 4=Pretty breaks. Default 0.",
                             "default": 0,
                         },
                         "invert_ramp": {
@@ -1292,8 +1342,13 @@ REGISTRY = {
                         "layer_name": {"type": "string"},
                         "shape": {
                             "type": "string",
-                            "enum": ["circle", "square", "diamond", "triangle", "star", "cross", "x", "arrow"],
-                            "description": "Marker shape.",
+                            "enum": [
+                                "circle", "square", "diamond", "triangle", "star",
+                                "cross", "x", "arrow", "pentagon", "hexagon",
+                                "octagon", "rounded_square", "semi_circle",
+                                "quarter_circle", "heart", "line"
+                            ],
+                            "description": "Marker shape. Common: circle, square, diamond, triangle, star, cross, x. Extended: pentagon, hexagon, octagon, rounded_square, semi_circle, quarter_circle, heart, line.",
                         },
                     },
                     "required": ["layer_name", "shape"],
@@ -1350,6 +1405,16 @@ REGISTRY = {
                                         "type": "number",
                                         "description": "Border width in mm (optional).",
                                     },
+                                    "stroke_style": {
+                                        "type": "string",
+                                        "enum": ["solid", "dash", "dot", "dash_dot", "no_line"],
+                                        "description": "Border/line style (optional). 'no_line' removes the border.",
+                                    },
+                                    "fill_style": {
+                                        "type": "string",
+                                        "enum": ["solid", "no_fill", "horizontal", "vertical", "cross", "b_diagonal", "f_diagonal", "diagonal_x"],
+                                        "description": "Polygon fill pattern (optional). 'solid'=plain fill, 'no_fill'=transparent, others=hatch patterns.",
+                                    },
                                 },
                                 "required": ["expression", "color", "label"],
                             },
@@ -1391,6 +1456,19 @@ REGISTRY = {
                             "type": "string",
                             "description": "Colour for values not in the color_map. Default '#AAAAAA'.",
                             "default": "#AAAAAA",
+                        },
+                        "stroke_color": {
+                            "type": "string",
+                            "description": "Border colour for all category symbols in hex. Pass 'none' to remove borders.",
+                        },
+                        "stroke_width": {
+                            "type": "number",
+                            "description": "Border width in mm for all category symbols. Ex: 0.0 to remove, 0.5 for visible border.",
+                        },
+                        "opacity": {
+                            "type": "number",
+                            "description": "Symbol opacity from 0.0 (transparent) to 1.0 (opaque). Default 1.0.",
+                            "default": 1.0,
                         },
                     },
                     "required": ["layer_name", "field_name", "color_map"],
