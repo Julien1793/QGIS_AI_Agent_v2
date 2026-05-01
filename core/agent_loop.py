@@ -267,33 +267,36 @@ class AgentLoop:
     def _classify_intent(self, prompt: str, t: dict) -> list:
         """
         Lightweight LLM call to classify the user's intent.
-        Falls back to ["read", "process"] if the call fails or returns no valid intents.
+        Falls back to ["chat"] if the call fails or returns no valid intents.
         """
-        api_url = self.settings.get(
-            "api_url", "http://localhost:1234/v1/chat/completions"
-        )
+        api_url = self.settings.get("api_url", "http://localhost:1234/v1/chat/completions")
         model = self.settings.get("model", "mistral")
-        headers = {"Content-Type": "application/json"}
-        if self.settings.get("mode") == "distant":
-            key = self.settings.get("api_key", "")
-            if key:
-                headers["Authorization"] = f"Bearer {key}"
+        api_format = self.settings.get_api_format()
+        headers = self._build_headers()
 
-        # o-series models require max_completion_tokens and don't support temperature != 1.
-        # All other backends (Mistral, Llama, older OpenAI-compat APIs) use max_tokens.
-        is_o_series = bool(re.match(r"^(o\d|gpt-5)", model))
-        token_key = "max_completion_tokens" if is_o_series else "max_tokens"
-        payload = {
-            "model": model,
-            "messages": [
-                {"role": "system", "content": t["agent_intent_system"]},
-                {"role": "user",
-                 "content": t["agent_intent_user"].format(prompt=prompt)},
-            ],
-            token_key: 150,
-        }
-        if not is_o_series:
-            payload["temperature"] = 0
+        if api_format == "claude":
+            payload = {
+                "model": model,
+                "max_tokens": 150,
+                "system": t["agent_intent_system"],
+                "messages": [{"role": "user",
+                               "content": t["agent_intent_user"].format(prompt=prompt)}],
+            }
+        else:
+            # o-series models require max_completion_tokens and don't support temperature != 1.
+            is_o_series = bool(re.match(r"^(o\d|gpt-5)", model))
+            token_key = "max_completion_tokens" if is_o_series else "max_tokens"
+            payload = {
+                "model": model,
+                "messages": [
+                    {"role": "system", "content": t["agent_intent_system"]},
+                    {"role": "user",
+                     "content": t["agent_intent_user"].format(prompt=prompt)},
+                ],
+                token_key: 150,
+            }
+            if not is_o_series:
+                payload["temperature"] = 0
 
         try:
             resp = post_with_retry(api_url, payload, headers, timeout=30,
@@ -308,7 +311,12 @@ class AgentLoop:
                     pass
             resp.raise_for_status()
             data = resp.json()
-            raw = data["choices"][0]["message"]["content"].strip()
+
+            if api_format == "claude":
+                content_blocks = data.get("content", [])
+                raw = next((b.get("text", "") for b in content_blocks if b.get("type") == "text"), "").strip()
+            else:
+                raw = data["choices"][0]["message"]["content"].strip()
 
             # Robustly extract the JSON object (the LLM may add surrounding prose).
             match = re.search(r"\{.*\}", raw, re.DOTALL)
@@ -354,35 +362,46 @@ class AgentLoop:
     def _llm_call(self, messages: list, tools: list) -> tuple:
         """
         Call the LLM with the current message history and tool schemas.
-        Returns (response_dict, tokens_used). Returns (None, 0) on failure.
+        Handles both OpenAI-compatible and Claude (Anthropic) native API formats.
+        Returns (response_dict, tokens_used, prompt_tokens). Returns (None, 0, 0) on failure.
         """
-        api_url = self.settings.get(
-            "api_url", "http://localhost:1234/v1/chat/completions"
-        )
+        api_url = self.settings.get("api_url", "http://localhost:1234/v1/chat/completions")
         model = self.settings.get("model", "mistral")
-        headers = {"Content-Type": "application/json"}
-        if self.settings.get("mode") == "distant":
-            key = self.settings.get("api_key", "")
-            if key:
-                headers["Authorization"] = f"Bearer {key}"
-
-        is_o_series = bool(re.match(r"^(o\d|gpt-5)", model))
-        token_key = "max_completion_tokens" if is_o_series else "max_tokens"
+        api_format = self.settings.get_api_format()
+        headers = self._build_headers()
         max_tokens = self.settings.get_agent_max_tokens()
 
-        payload = {
-            "model": model,
-            "messages": messages,
-            "tools": tools,
-            "tool_choice": "auto",
-            token_key: max_tokens,
-        }
+        if api_format == "claude":
+            system, claude_msgs = self._to_claude_messages(messages)
+            claude_tools = self._to_claude_tools(tools)
+            payload = {
+                "model": model,
+                "max_tokens": max_tokens,
+                "system": system,
+                "messages": claude_msgs,
+                "tool_choice": {"type": "auto"},
+            }
+            if claude_tools:
+                payload["tools"] = claude_tools
+        else:
+            is_o_series = bool(re.match(r"^(o\d|gpt-5)", model))
+            token_key = "max_completion_tokens" if is_o_series else "max_tokens"
+            payload = {
+                "model": model,
+                "messages": messages,
+                "tools": tools,
+                "tool_choice": "auto",
+                token_key: max_tokens,
+            }
 
         try:
             resp = post_with_retry(api_url, payload, headers, timeout=self.settings.get_request_timeout(),
                                    verify=self.settings.get_ssl_verify())
             resp.raise_for_status()
             data = resp.json()
+
+            if api_format == "claude":
+                return self._parse_claude_llm_response(data)
 
             usage = data.get("usage", {})
             tokens = usage.get("total_tokens", 0) if isinstance(usage, dict) else 0
@@ -410,11 +429,15 @@ class AgentLoop:
 
         except Exception as e:
             import traceback
-            self._last_llm_error = str(e)
+            body = ""
+            if hasattr(e, "response") and e.response is not None:
+                body = e.response.text[:400]
+            self._last_llm_error = str(e) + (f" — {body}" if body else "")
             try:
                 from qgis.core import QgsMessageLog, Qgis
                 QgsMessageLog.logMessage(
-                    f"[AgentLoop] LLM call failed: {traceback.format_exc()}",
+                    f"[AgentLoop] LLM call failed: {traceback.format_exc()}"
+                    + (f"\nResponse body: {body}" if body else ""),
                     "AI Agent", Qgis.Critical)
             except Exception:
                 pass
@@ -702,3 +725,175 @@ class AgentLoop:
             return int(val) if val else 8
         except Exception:
             return 8
+
+    def _build_headers(self) -> dict:
+        """Build API request headers based on the configured api_format (openai or claude)."""
+        api_format = self.settings.get_api_format()
+        headers = {"Content-Type": "application/json"}
+        if api_format == "claude":
+            headers["x-api-key"] = self.settings.get("api_key", "")
+            headers["anthropic-version"] = "2023-06-01"
+        elif self.settings.get("mode") == "distant":
+            key = self.settings.get("api_key", "")
+            if key:
+                headers["Authorization"] = f"Bearer {key}"
+        return headers
+
+    def _to_claude_messages(self, messages: list) -> tuple:
+        """Convert an OpenAI-format messages list to Claude format.
+
+        Returns (system_prompt: str, claude_messages: list).
+        Rules:
+          - system role → extracted as top-level system string
+          - tool role   → merged into a user message as tool_result content blocks
+          - assistant with tool_calls → content array with text + tool_use blocks
+          - user with image_url parts → converted to Claude image source blocks
+          Consecutive user messages are merged into a single user message to satisfy
+          Claude's strict user/assistant alternation requirement.
+        """
+        system = ""
+        claude_msgs = []
+
+        def _last_is_user_list():
+            return (claude_msgs
+                    and claude_msgs[-1]["role"] == "user"
+                    and isinstance(claude_msgs[-1]["content"], list))
+
+        for m in messages:
+            role = m.get("role")
+            content = m.get("content")
+
+            if role == "system":
+                system = content or ""
+                continue
+
+            if role == "tool":
+                block = {
+                    "type": "tool_result",
+                    "tool_use_id": m.get("tool_call_id", ""),
+                    "content": content or "",
+                }
+                if _last_is_user_list():
+                    claude_msgs[-1]["content"].append(block)
+                else:
+                    claude_msgs.append({"role": "user", "content": [block]})
+                continue
+
+            if role == "assistant":
+                tool_calls = m.get("tool_calls") or []
+                if tool_calls:
+                    claude_content = []
+                    if content:
+                        claude_content.append({"type": "text", "text": content})
+                    for tc in tool_calls:
+                        try:
+                            args = json.loads(tc["function"]["arguments"])
+                        except Exception:
+                            args = {}
+                        claude_content.append({
+                            "type": "tool_use",
+                            "id": tc.get("id", ""),
+                            "name": tc["function"]["name"],
+                            "input": args,
+                        })
+                    claude_msgs.append({"role": "assistant", "content": claude_content})
+                else:
+                    claude_msgs.append({"role": "assistant", "content": content or ""})
+                continue
+
+            if role == "user":
+                if isinstance(content, list):
+                    # Multipart user message — convert image_url to Claude image source.
+                    parts = []
+                    for part in content:
+                        if part.get("type") == "text":
+                            parts.append({"type": "text", "text": part["text"]})
+                        elif part.get("type") == "image_url":
+                            url = (part.get("image_url") or {}).get("url", "")
+                            if url.startswith("data:image/"):
+                                header, b64data = url.split(",", 1)
+                                # Detect the real format from base64 magic bytes.
+                                # The declared media type in the URL can be wrong
+                                # (e.g. QGIS saves JPEG but labels it image/png).
+                                if b64data.startswith("/9j/"):
+                                    media_type = "image/jpeg"
+                                elif b64data.startswith("iVBOR"):
+                                    media_type = "image/png"
+                                elif b64data.startswith("R0lGO"):
+                                    media_type = "image/gif"
+                                elif b64data.startswith("UklGR"):
+                                    media_type = "image/webp"
+                                else:
+                                    media_type = header.split(";")[0].split(":")[1]
+                                parts.append({
+                                    "type": "image",
+                                    "source": {
+                                        "type": "base64",
+                                        "media_type": media_type,
+                                        "data": b64data,
+                                    },
+                                })
+
+                    if _last_is_user_list():
+                        last_content = claude_msgs[-1]["content"]
+                        # Claude does not allow mixing tool_result with other content types
+                        # in the same user message. Instead embed the vision parts directly
+                        # inside the last tool_result block's content field (explicitly
+                        # allowed by the Claude spec: tool_result.content can be an array).
+                        if last_content and last_content[-1].get("type") == "tool_result":
+                            tr = last_content[-1]
+                            existing = tr.get("content", "")
+                            if isinstance(existing, str):
+                                new_content = ([{"type": "text", "text": existing}]
+                                               if existing else [])
+                            else:
+                                new_content = list(existing)
+                            tr["content"] = new_content + parts
+                        else:
+                            last_content.extend(parts)
+                    else:
+                        claude_msgs.append({"role": "user", "content": parts})
+                else:
+                    claude_msgs.append({"role": "user", "content": content or ""})
+
+        return system, claude_msgs
+
+    def _to_claude_tools(self, tools: list) -> list:
+        """Convert OpenAI-format tool schemas to Claude format."""
+        result = []
+        for t in tools:
+            fn = t.get("function", {})
+            result.append({
+                "name": fn["name"],
+                "description": fn.get("description", ""),
+                "input_schema": fn.get("parameters", {"type": "object", "properties": {}}),
+            })
+        return result
+
+    def _parse_claude_llm_response(self, data: dict) -> tuple:
+        """Parse a Claude Messages API response into the internal response dict format."""
+        usage = data.get("usage", {})
+        input_tokens = usage.get("input_tokens", 0) if isinstance(usage, dict) else 0
+        output_tokens = usage.get("output_tokens", 0) if isinstance(usage, dict) else 0
+
+        text = ""
+        tool_calls = []
+        for block in data.get("content", []):
+            if block.get("type") == "text":
+                text += block.get("text", "")
+            elif block.get("type") == "tool_use":
+                tool_calls.append({
+                    "id": block.get("id", f"toolu_{int(time.time())}"),
+                    "type": "function",
+                    "function": {
+                        "name": block.get("name", ""),
+                        "arguments": json.dumps(block.get("input", {}), ensure_ascii=False),
+                    },
+                })
+
+        response = {"content": text.strip()}
+        if tool_calls:
+            response["tool_calls"] = tool_calls
+
+        total = input_tokens + output_tokens
+        return response, total, input_tokens

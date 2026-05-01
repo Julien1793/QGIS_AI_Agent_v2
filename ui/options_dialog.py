@@ -45,6 +45,19 @@ class OptionsDialog(QDialog):
         self.mode_layout.addWidget(self.mode_combo)
         tab_conn_layout.addLayout(self.mode_layout)
 
+        self.api_format_layout = QHBoxLayout()
+        self.api_format_label = QLabel()
+        self.api_format_combo = QComboBox()
+        self.api_format_combo.addItem("", "openai")
+        self.api_format_combo.addItem("", "claude")
+        saved_fmt = self.settings.get_api_format()
+        idx_fmt = self.api_format_combo.findData(saved_fmt)
+        self.api_format_combo.setCurrentIndex(idx_fmt if idx_fmt >= 0 else 0)
+        self.api_format_combo.currentIndexChanged.connect(self.update_visibility)
+        self.api_format_layout.addWidget(self.api_format_label)
+        self.api_format_layout.addWidget(self.api_format_combo)
+        tab_conn_layout.addLayout(self.api_format_layout)
+
         self.url_layout = QHBoxLayout()
         self.url_label = QLabel()
         self.url_input = QLineEdit()
@@ -305,6 +318,9 @@ class OptionsDialog(QDialog):
         self.mode_label.setText(self.t["mode"])
         self.mode_combo.setItemText(0, self.t.get("mode_local", "Local"))
         self.mode_combo.setItemText(1, self.t.get("mode_remote", "Distant"))
+        self.api_format_label.setText(self.t.get("api_format", "API format:"))
+        self.api_format_combo.setItemText(0, self.t.get("api_format_openai", "OpenAI compatible"))
+        self.api_format_combo.setItemText(1, self.t.get("api_format_claude", "Claude (Anthropic)"))
         self.lang_label.setText(self.t["language"])
         self.history_label.setText(self.t["history_count"])
         self.url_label.setText(self.t["url"])
@@ -357,9 +373,10 @@ class OptionsDialog(QDialog):
 
     def update_visibility(self):
         is_distant = self.mode_combo.currentData() == "distant"
-        # API key is only needed for remote mode
-        self.key_label.setVisible(is_distant)
-        self.api_key_input.setVisible(is_distant)
+        is_claude = self.api_format_combo.currentData() == "claude"
+        # API key is needed for remote mode or Claude (always a remote API)
+        self.key_label.setVisible(is_distant or is_claude)
+        self.api_key_input.setVisible(is_distant or is_claude)
 
         trace_on = self.trace_checkbox.isChecked()
         self.trace_path_label.setEnabled(trace_on)
@@ -388,23 +405,32 @@ class OptionsDialog(QDialog):
 
     def test_connection(self):
         url = self.url_input.text().strip()
-        model = (self.model_input.text().strip() or "gpt-4")
-        headers = {}
-
-        if self.mode_combo.currentData() == "distant":
-            key = self.api_key_input.text().strip()
-            if key:
-                headers["Authorization"] = f"Bearer {key}"
+        model = self.model_input.text().strip()
+        api_format = self.api_format_combo.currentData()
+        key = self.api_key_input.text().strip()
 
         if not url:
             QMessageBox.warning(self, self.t["error"], self.t["url_required"])
             return
 
-        try:
+        headers = {"Content-Type": "application/json"}
+        if api_format == "claude":
+            headers["x-api-key"] = key
+            headers["anthropic-version"] = "2023-06-01"
             payload = {
-                "model": model,
-                "messages": [{"role": "user", "content": "ping"}]
+                "model": model or "claude-haiku-4-5-20251001",
+                "max_tokens": 1,
+                "messages": [{"role": "user", "content": "ping"}],
             }
+        else:
+            if self.mode_combo.currentData() == "distant" and key:
+                headers["Authorization"] = f"Bearer {key}"
+            payload = {
+                "model": model or "gpt-4",
+                "messages": [{"role": "user", "content": "ping"}],
+            }
+
+        try:
             response = requests.post(url, json=payload, headers=headers, timeout=15,
                                      verify=self.settings.get_ssl_verify())
             response.raise_for_status()
@@ -425,6 +451,7 @@ class OptionsDialog(QDialog):
         lang = "fr" if self.lang_combo.currentText() == "French" else "en"
         self.settings.set_language(lang)
         self.settings.set_mode(self.mode_combo.currentData())
+        self.settings.set_api_format(self.api_format_combo.currentData())
         # Use the same key that MainDock and ConversationManager read
         self.settings.set("history_turns", int(self.history_spin.value()))
         self.settings.set_api_url(self.url_input.text().strip())
@@ -494,6 +521,7 @@ class OptionsDialog(QDialog):
         # 3) Reset the Options UI to visible defaults
         self.lang_combo.setCurrentText("French")
         self.mode_combo.setCurrentIndex(self.mode_combo.findData("local"))
+        self.api_format_combo.setCurrentIndex(self.api_format_combo.findData("openai"))
         self.history_spin.setValue(0)
         self.url_input.setText(self.settings.get_api_url())  # retombe sur défaut
         self.model_input.setText(self.settings.get_model())

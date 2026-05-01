@@ -46,7 +46,7 @@
 
 **AI Assistant QGIS** is a plugin that lets you control QGIS using plain language. Describe what you want to do — buffer that layer, style features by category, clip two datasets, calculate a field — and the AI agent figures out how, selects the right tools, calls them in sequence, and reports back.
 
-It works with **local LLMs** (LM Studio, Ollama), **cloud APIs** (OpenAI, OpenRouter, Fireworks), and **on-premise LLM servers** (any OpenAI-compatible endpoint). No internet connection is required if you run a local or internal model.
+It works with **local LLMs** (LM Studio, Ollama), **cloud APIs** (OpenAI, OpenRouter, Fireworks, **Claude / Anthropic**), and **on-premise LLM servers** (any OpenAI-compatible endpoint). No internet connection is required if you run a local or internal model.
 
 Two modes are available:
 
@@ -88,7 +88,8 @@ Two modes are available:
 ### General
 
 - **Bilingual** interface: French and English
-- **Multi-backend LLM support**: LM Studio, Ollama, OpenAI, OpenRouter, Fireworks, on-premise LLM servers, any OpenAI-compatible endpoint
+- **Multi-backend LLM support**: LM Studio, Ollama, OpenAI, OpenRouter, Fireworks, Claude (Anthropic), on-premise LLM servers, any OpenAI-compatible endpoint
+- **Dual API format**: OpenAI-compatible mode (default) and Claude native mode — selectable per connection in Options
 - **SSE streaming** with graceful fallback to batch response
 - **Project context injection**: current layer names, geometry types, and CRS are automatically included per request; field schemas are fetched on demand via `get_layer_fields`
 - **Prompt token gauge**: live status bar indicator showing tokens consumed by the current request vs. the configured context window limit
@@ -155,16 +156,33 @@ Open **Options** from the plugin panel to configure the connection.
 
 **On-premise / internal servers**: set the API URL to your internal endpoint and leave the API key empty or set it to your internal token.
 
-### Remote backend
+### Remote backend — OpenAI-compatible
 
 | Field | Value |
 |---|---|
 | Mode | Remote |
+| API format | OpenAI compatible |
 | API URL | `https://api.openai.com/v1/chat/completions` (or your provider's endpoint) |
 | Model | `gpt-4o`, `gpt-4o-mini`, `openai/gpt-4o` (OpenRouter), etc. |
 | API Key | Your provider API key |
 
-**Supported providers**: OpenAI, OpenRouter, Fireworks, or any OpenAI-compatible endpoint.
+**Supported providers**: OpenAI, OpenRouter, Fireworks, Mistral, or any OpenAI-compatible endpoint.
+
+> **Tip — Gemini**: Google exposes an OpenAI-compatible endpoint for Gemini models. Set the URL to `https://generativelanguage.googleapis.com/v1beta/openai/chat/completions`, keep the format on **OpenAI compatible**, and use your Google AI Studio key.
+
+### Remote backend — Claude (Anthropic)
+
+| Field | Value |
+|---|---|
+| Mode | Remote |
+| API format | **Claude (Anthropic)** |
+| API URL | `https://api.anthropic.com/v1/messages` |
+| Model | `claude-sonnet-4-6`, `claude-opus-4-7`, `claude-haiku-4-5-20251001`, … |
+| API Key | Your Anthropic API key (`sk-ant-...`) |
+
+In Claude format the plugin uses the native Anthropic Messages API: the system prompt is sent as a top-level field, tool schemas use `input_schema`, tool results are embedded as `tool_result` content blocks, and vision content (canvas screenshots) is embedded directly inside the corresponding `tool_result` block. All of this is handled transparently — the rest of the workflow is identical to OpenAI mode.
+
+> **Rate limits**: Anthropic imposes per-minute input-token limits per organisation tier. On lower tiers (30 000 TPM) a complex agent run with a canvas screenshot can hit this limit. Disabling **canvas capture** in Options → Agent reduces token usage significantly.
 
 ### Tab: LLM
 
@@ -383,4 +401,4 @@ This project is licensed under the **GNU General Public License v2.0** — see [
 ## Acknowledgements
 
 Built on top of [QGIS](https://qgis.org/) and the PyQGIS API.  
-LLM backend communication follows the [OpenAI Chat Completions API](https://platform.openai.com/docs/api-reference/chat) format, which is also supported by LM Studio, Ollama, OpenRouter, and Fireworks.
+LLM backend communication supports two API formats: the [OpenAI Chat Completions API](https://platform.openai.com/docs/api-reference/chat) (default, compatible with LM Studio, Ollama, OpenRouter, Fireworks, and Mistral) and the [Anthropic Messages API](https://docs.anthropic.com/en/api/messages) (Claude native format).

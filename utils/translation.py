@@ -152,6 +152,9 @@ def get_translations(lang):
             "mode_remote": "Distant",
             "streaming_mode": "Activer le mode streaming (SSE)",
             "streaming_hint": "Affiche la réponse en temps réel si l'API le supporte.",
+            "api_format": "Format API :",
+            "api_format_openai": "OpenAI compatible",
+            "api_format_claude": "Claude (Anthropic)",
 
             # ═══════════════════════════════════════════════════
             # TRAITEMENTS PERSONNALISÉS
@@ -510,6 +513,9 @@ def get_translations(lang):
             "mode_remote": "Remote",
             "streaming_mode": "Enable streaming mode (SSE)",
             "streaming_hint": "Render the reply in real time if supported by the API.",
+            "api_format": "API format:",
+            "api_format_openai": "OpenAI compatible",
+            "api_format_claude": "Claude (Anthropic)",
 
             # ═══════════════════════════════════════════════════
             # CUSTOM PROCESSES

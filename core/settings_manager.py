@@ -82,6 +82,13 @@ class SettingsManager:
     def set_api_key(self, key):
         self.set("api_key", key)
 
+    # API request/response format: "openai" (default) or "claude"
+    def get_api_format(self) -> str:
+        return self.get("api_format", "openai")
+
+    def set_api_format(self, fmt: str):
+        self.set("api_format", fmt)
+
     # Number of recent conversation turns to include in each API request (0 = no history)
     def get_history_turns(self):
         return self.get_int("history_turns", 0)

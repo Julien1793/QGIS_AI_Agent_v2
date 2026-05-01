@@ -8,7 +8,6 @@ class AIAgent:
     def __init__(self, settings_manager):
         self.settings = settings_manager
 
-    
     def _supports_zero_max_tokens(self, url: str, model: str = "") -> bool:
         # OpenAI, OpenRouter, Fireworks and Mistral-family models accept max_tokens=0.
         # LM Studio (localhost:1234) does not.
@@ -22,6 +21,12 @@ class AIAgent:
         """
         Send a chat request to the configured LLM backend.
 
+        Supports two API formats (configured via SettingsManager.get_api_format()):
+          - "openai"  : OpenAI-compatible format (default) — works with LM Studio, Ollama,
+                        OpenAI, OpenRouter, Fireworks, Mistral, etc.
+          - "claude"  : Anthropic native Messages API — uses x-api-key auth, system as a
+                        top-level field, and Claude-specific SSE event names.
+
         If streaming is enabled and on_stream is provided, attempts SSE streaming
         and calls on_stream(chunk) for each text delta received.
         Always returns (final_text, usage_dict | total_tokens).
@@ -30,13 +35,17 @@ class AIAgent:
         mode_type = self.settings.get("mode", "local")
         api_url = self.settings.get("api_url", "http://localhost:1234/v1/chat/completions")
         model = self.settings.get("model", "mistral")
+        api_format = self.settings.get_api_format()
 
-        # --- Build request headers
+        # --- Build request headers (format-specific auth)
+        api_key = self.settings.get("api_key", "") if mode_type == "distant" else ""
         headers = {"Content-Type": "application/json"}
-        if mode_type == "distant":
-            api_key = self.settings.get("api_key", "")
-            if api_key:
-                headers["Authorization"] = f"Bearer {api_key}"
+        if api_format == "claude":
+            # Claude native API: x-api-key + required version header
+            headers["x-api-key"] = self.settings.get("api_key", "")
+            headers["anthropic-version"] = "2023-06-01"
+        elif mode_type == "distant" and api_key:
+            headers["Authorization"] = f"Bearer {api_key}"
 
         # --- Resolve the system prompt for the requested mode
         t = get_translations(lang)
@@ -64,11 +73,26 @@ class AIAgent:
             return out
 
         clean_messages = _norm_msgs(messages)
-        built_messages = [{"role": "system", "content": system_prompt}] + clean_messages
-        if not clean_messages:
-            built_messages.append({"role": "user", "content": str(user_input).strip()})
 
-        payload = {"model": model, "messages": built_messages}
+        # --- Build format-specific payload
+        if api_format == "claude":
+            # Claude: system is a top-level field; messages array must not contain system role;
+            # max_tokens is required.
+            claude_messages = [m for m in clean_messages if m["role"] != "system"]
+            if not claude_messages:
+                claude_messages = [{"role": "user", "content": str(user_input).strip()}]
+            payload = {
+                "model": model,
+                "max_tokens": self.settings.get_agent_max_tokens(),
+                "system": system_prompt,
+                "messages": claude_messages,
+            }
+            built_messages = claude_messages
+        else:
+            built_messages = [{"role": "system", "content": system_prompt}] + clean_messages
+            if not clean_messages:
+                built_messages.append({"role": "user", "content": str(user_input).strip()})
+            payload = {"model": model, "messages": built_messages}
 
         # --- Optional request/response trace logging
         export_traces = bool(self.settings.get_export_traces() or False)
@@ -78,6 +102,8 @@ class AIAgent:
             hh = dict(h or {})
             if "Authorization" in hh:
                 hh["Authorization"] = "Bearer ****"
+            if "x-api-key" in hh:
+                hh["x-api-key"] = "****"
             return hh
 
         def _write_trace(trace_obj):
@@ -104,9 +130,10 @@ class AIAgent:
                 payload_stream = dict(payload)
                 payload_stream["stream"] = True
 
-                # Request usage stats in the final stream chunk (OpenAI-compatible).
-                # Silently ignored by backends that do not support it (e.g. LM Studio).
-                payload_stream["stream_options"] = {"include_usage": True}
+                if api_format != "claude":
+                    # Request usage stats in the final stream chunk (OpenAI-compatible).
+                    # Silently ignored by backends that do not support it (e.g. LM Studio).
+                    payload_stream["stream_options"] = {"include_usage": True}
 
                 # Set SSE-specific request headers.
                 hdrs = dict(headers)
@@ -139,7 +166,7 @@ class AIAgent:
                     return f"{t['llm_request_error']} ({resp.status_code}): {resp.text}", 0
 
                 final_parts = []
-                usage = {}  # on tentera de le remplir pendant le flux
+                usage = {}
 
                 # Read raw bytes to avoid encoding issues with some SSE implementations.
                 for raw in resp.iter_lines(decode_unicode=False, delimiter=b"\n"):
@@ -148,34 +175,57 @@ class AIAgent:
 
                     line = raw.decode("utf-8", errors="replace").strip()
 
+                    # Skip SSE event-type lines and keep-alive pings.
+                    # Claude sends "event: content_block_delta" etc. before each data line.
+                    if line.startswith("event:") or line.startswith(":"):
+                        continue
+
                     # Strip the "data:" SSE prefix when present.
                     if line.startswith("data:"):
                         line = line[5:].strip()
 
-                    if not line or line == "[DONE]" or line.startswith(":"):
-                        # Skip keep-alive pings and the [DONE] sentinel.
+                    if not line or line == "[DONE]":
                         continue
 
                     chunk_text = ""
                     try:
                         obj = json.loads(line)
 
-                        # a) Standard OpenAI delta format.
-                        if "choices" in obj and obj["choices"]:
-                            ch0 = obj["choices"][0]
-                            delta = ch0.get("delta") or {}
-                            chunk_text = delta.get("content") or ""
-                            if not chunk_text:
-                                msg = ch0.get("message") or {}
-                                chunk_text = msg.get("content") or ""
+                        if api_format == "claude":
+                            # Claude SSE event types:
+                            # - message_start    : contains input token count in usage
+                            # - content_block_delta : contains text delta
+                            # - message_delta    : contains output token count in usage
+                            event_type = obj.get("type", "")
+                            if event_type == "content_block_delta":
+                                delta = obj.get("delta", {})
+                                if delta.get("type") == "text_delta":
+                                    chunk_text = delta.get("text", "")
+                            elif event_type == "message_start":
+                                msg_usage = obj.get("message", {}).get("usage", {})
+                                if msg_usage:
+                                    usage.update(msg_usage)
+                            elif event_type == "message_delta":
+                                delta_usage = obj.get("usage", {})
+                                if delta_usage:
+                                    usage.update(delta_usage)
+                        else:
+                            # a) Standard OpenAI delta format.
+                            if "choices" in obj and obj["choices"]:
+                                ch0 = obj["choices"][0]
+                                delta = ch0.get("delta") or {}
+                                chunk_text = delta.get("content") or ""
+                                if not chunk_text:
+                                    msg = ch0.get("message") or {}
+                                    chunk_text = msg.get("content") or ""
 
-                        # b) Capture usage stats if the backend includes them in the final chunk.
-                        if "usage" in obj and isinstance(obj["usage"], dict):
-                            usage = obj["usage"]
+                            # b) Capture usage stats if the backend includes them in the final chunk.
+                            if "usage" in obj and isinstance(obj["usage"], dict):
+                                usage = obj["usage"]
 
-                        # c) LM Studio non-standard format: content is at the root level.
-                        if not chunk_text and isinstance(obj.get("content"), str):
-                            chunk_text = obj["content"]
+                            # c) LM Studio non-standard format: content is at the root level.
+                            if not chunk_text and isinstance(obj.get("content"), str):
+                                chunk_text = obj["content"]
 
                     except Exception:
                         # Non-JSON chunk — treat as raw text.
@@ -190,8 +240,8 @@ class AIAgent:
                     final = t.get("llm_request_error", "LLM request error") + ": Empty streamed response"
 
                 # Fallback: make a second lightweight non-streaming call to retrieve usage stats.
-                # max_tokens=0 is accepted by OpenAI and most proxies; errors are silently ignored.
-                if not usage:
+                # Skipped for Claude — usage is always included in message_start / message_delta events.
+                if not usage and api_format != "claude":
                     try:
                         if self._supports_zero_max_tokens(api_url, model):
                             payload_usage = {"model": model, "messages": built_messages, "max_tokens": 0}
@@ -250,15 +300,26 @@ class AIAgent:
             trace["response"]["json_parsed"] = True
             _write_trace(trace)
 
-            if "error" in data:
-                return f"{t['llm_backend_error']}: {data['error']}", 0
-            if not data.get("choices"):
-                return f"{t['llm_request_error']}: Empty response", 0
+            if api_format == "claude":
+                if "error" in data:
+                    err = data["error"]
+                    msg = err.get("message", str(err)) if isinstance(err, dict) else str(err)
+                    return f"{t['llm_backend_error']}: {msg}", 0
+                content_blocks = data.get("content", [])
+                if not content_blocks:
+                    return f"{t['llm_request_error']}: Empty response", 0
+                raw_content = next((b["text"] for b in content_blocks if b.get("type") == "text"), "")
+                usage = data.get("usage", {})
+            else:
+                if "error" in data:
+                    return f"{t['llm_backend_error']}: {data['error']}", 0
+                if not data.get("choices"):
+                    return f"{t['llm_request_error']}: Empty response", 0
+                raw_content = data["choices"][0]["message"]["content"]
+                usage = data.get("usage", {})
 
-            raw_content = data["choices"][0]["message"]["content"]
-            usage = data.get("usage", {})
             final_message = self._extract_final_message(raw_content)
-            return final_message, (usage or usage.get("total_tokens", 0))
+            return final_message, (usage or usage.get("total_tokens", 0) if isinstance(usage, dict) else 0)
 
         except Exception as e:
             trace = {
