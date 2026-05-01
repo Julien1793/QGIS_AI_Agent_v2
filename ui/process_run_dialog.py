@@ -42,13 +42,17 @@ class _RunWorker(QObject):
     tool_request = pyqtSignal(str, object) # (tool_name, args) → main thread
     finished = pyqtSignal()
 
-    def __init__(self, runner: ProcessRunner, process_dict: dict, values: dict):
+    def __init__(self, runner: ProcessRunner, process_dict: dict, values: dict,
+                 timeout_msg: str = "Timeout — tool did not respond after 120 s",
+                 error_prefix: str = "Error: {error}"):
         super().__init__()
         self._runner = runner
         self._process = process_dict
         self._values = values
         self._tool_event = threading.Event()
         self._tool_result = None
+        self._timeout_msg = timeout_msg
+        self._error_prefix = error_prefix
 
     def receive_tool_result(self, result: dict):
         """Called from the main thread to post the tool result back."""
@@ -62,7 +66,7 @@ class _RunWorker(QObject):
             self.tool_request.emit(tool_name, dict(args))
             if not self._tool_event.wait(timeout=120):
                 return {"success": False, "tool": tool_name,
-                        "error": "Timeout — outil sans réponse après 120 s"}
+                        "error": self._timeout_msg}
             return self._tool_result
 
         try:
@@ -70,7 +74,8 @@ class _RunWorker(QObject):
                                           tool_executor=tool_executor):
                 self.progress.emit(event)
         except Exception as e:
-            self.progress.emit({"type": "tool_error", "text": f"Erreur : {e}", "data": {}})
+            self.progress.emit({"type": "tool_error",
+                                "text": self._error_prefix.format(error=e), "data": {}})
         self.finished.emit()
 
 
@@ -85,6 +90,7 @@ class ProcessRunDialog(QDialog):
 
     def __init__(self, process_dict: dict, agent_loop, language: str = "fr", parent=None):
         super().__init__(parent)
+        self._language = language
         self._t = get_translations(language)
         name = process_dict.get("name", self._t.get("process_fallback_name", "Untitled"))
         self.setWindowTitle(self._t["process_run_dlg_title"].format(name=name))
@@ -117,7 +123,7 @@ class ProcessRunDialog(QDialog):
             root.addWidget(desc_lbl)
 
         steps = self.process_dict.get("steps", [])
-        info_lbl = QLabel(f"<small>{len(steps)} étape(s) enregistrée(s)</small>")
+        info_lbl = QLabel(f"<small>{self._t['process_run_step_count'].format(n=len(steps))}</small>")
         root.addWidget(info_lbl)
 
         sep = QWidget()
@@ -141,10 +147,9 @@ class ProcessRunDialog(QDialog):
                 if step_num is not None and step_num != current_step:
                     current_step = step_num
                     short_tool = step_tool.replace("set_label_", "lbl·").replace("set_", "")
-                    sep_lbl = QLabel(
-                        f"<small style='color:#4a90d9;'>— Étape {step_num} : "
-                        f"<b>{short_tool}</b> —</small>"
-                    )
+                    sep_text = self._t["process_run_step_sep"].format(
+                        num=step_num, tool=f"<b>{short_tool}</b>")
+                    sep_lbl = QLabel(f"<small style='color:#4a90d9;'>{sep_text}</small>")
                     sep_lbl.setAlignment(Qt.AlignCenter)
                     sep_lbl.setContentsMargins(0, 6, 0, 2)
                     self._form.addRow(sep_lbl)
@@ -159,7 +164,7 @@ class ProcessRunDialog(QDialog):
             scroll.setMaximumHeight(300)
             root.addWidget(scroll)
         else:
-            root.addWidget(QLabel("<i>Aucune variable — le traitement s'exécute tel quel.</i>"))
+            root.addWidget(QLabel(f"<i>{self._t['process_run_no_vars']}</i>"))
 
         # ── Progress log ──
         self._log = QTextEdit()
@@ -170,11 +175,11 @@ class ProcessRunDialog(QDialog):
         root.addWidget(self._log)
 
         # ── Buttons ──
-        self._run_btn = QPushButton("Lancer")
+        self._run_btn = QPushButton(self._t["process_run_btn"])
         self._run_btn.setDefault(True)
         self._run_btn.clicked.connect(self._on_run)
 
-        self._close_btn = QPushButton("Fermer")
+        self._close_btn = QPushButton(self._t["process_run_close_btn"])
         self._close_btn.clicked.connect(self.reject)
 
         btn_row = QHBoxLayout()
@@ -205,7 +210,7 @@ class ProcessRunDialog(QDialog):
             # Simple text input — field names depend on which layer is chosen,
             # which may not be known yet.
             widget = QLineEdit(default)
-            widget.setPlaceholderText("Nom du champ")
+            widget.setPlaceholderText(self._t["process_run_field_placeholder"])
             return widget
 
         if var_type == "crs":
@@ -227,7 +232,7 @@ class ProcessRunDialog(QDialog):
             row = QHBoxLayout(container)
             row.setContentsMargins(0, 0, 0, 0)
             le = QLineEdit(default)
-            le.setPlaceholderText("Chemin vers le fichier…")
+            le.setPlaceholderText(self._t["process_run_file_placeholder"])
             row.addWidget(le)
             btn = QPushButton("…")
             btn.setFixedWidth(30)
@@ -250,7 +255,7 @@ class ProcessRunDialog(QDialog):
             lbl_hex.setStyleSheet("color: #666; font-size: 11px;")
 
             def _pick(_checked=False, b=btn, lbl=lbl_hex):
-                c = QColorDialog.getColor(b._color, self, "Choisir une couleur")
+                c = QColorDialog.getColor(b._color, self, self._t["process_run_choose_color"])
                 if c.isValid():
                     b._color = c
                     b.setStyleSheet(f"background-color: {c.name()}; border: 1px solid #888;")
@@ -300,7 +305,7 @@ class ProcessRunDialog(QDialog):
     # ──────────────────────────────────────────────────────────
 
     def _browse_file(self, line_edit: QLineEdit):
-        path, _ = QFileDialog.getSaveFileName(self, "Choisir un fichier de sortie")
+        path, _ = QFileDialog.getSaveFileName(self, self._t["process_run_choose_file"])
         if path:
             line_edit.setText(path)
 
@@ -310,8 +315,10 @@ class ProcessRunDialog(QDialog):
         self._log.clear()
         self._run_btn.setEnabled(False)
 
-        runner = ProcessRunner(self.agent_loop)
-        self._worker = _RunWorker(runner, self.process_dict, values)
+        runner = ProcessRunner(self.agent_loop, language=self._language)
+        self._worker = _RunWorker(runner, self.process_dict, values,
+                                  timeout_msg=self._t["process_run_timeout"],
+                                  error_prefix=self._t["process_run_generic_error"])
         self._thread = QThread(self)
         self._worker.moveToThread(self._thread)
 

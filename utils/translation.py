@@ -237,6 +237,26 @@ def get_translations(lang):
             "process_load_error": "Impossible de charger le traitement :\n{error}",
             "process_delete_confirm_msg": "Supprimer le traitement « {name} » ?\n{path}",
             "process_delete_error": "Impossible de supprimer :\n{error}",
+            # Dialogue d'exécution
+            "process_run_step_count": "{n} étape(s) enregistrée(s)",
+            "process_run_no_vars": "Aucune variable — le traitement s'exécute tel quel.",
+            "process_run_btn": "Lancer",
+            "process_run_close_btn": "Fermer",
+            "process_run_step_sep": "— Étape {num} : {tool} —",
+            "process_run_choose_color": "Choisir une couleur",
+            "process_run_choose_file": "Choisir un fichier de sortie",
+            "process_run_field_placeholder": "Nom du champ",
+            "process_run_file_placeholder": "Chemin vers le fichier…",
+            "process_run_timeout": "Timeout — outil sans réponse après 120 s",
+            "process_run_generic_error": "Erreur : {error}",
+            # Événements runner
+            "process_evt_start": "Démarrage du traitement « {name} » ({total} étapes)",
+            "process_evt_step_call": "Étape {idx}/{total} : {tool}",
+            "process_evt_step_ok": "Étape {idx} réussie",
+            "process_evt_unknown_error": "Erreur inconnue",
+            "process_evt_step_error": "Étape {idx} échouée : {error}",
+            "process_evt_aborted": "Traitement interrompu à l'étape {idx}.",
+            "process_evt_done": "Traitement « {name} » terminé ({total} étapes).",
 
             # Windows CA bundle
             "use_windows_ca_bundle": "Utiliser les certificats Windows (CA bundle)",
@@ -570,6 +590,26 @@ def get_translations(lang):
             "process_load_error": "Could not load the process:\n{error}",
             "process_delete_confirm_msg": "Delete the process \"{name}\"?\n{path}",
             "process_delete_error": "Could not delete:\n{error}",
+            # Run dialog
+            "process_run_step_count": "{n} recorded step(s)",
+            "process_run_no_vars": "No variables — the process runs as-is.",
+            "process_run_btn": "Run",
+            "process_run_close_btn": "Close",
+            "process_run_step_sep": "— Step {num}: {tool} —",
+            "process_run_choose_color": "Choose a color",
+            "process_run_choose_file": "Choose an output file",
+            "process_run_field_placeholder": "Field name",
+            "process_run_file_placeholder": "File path…",
+            "process_run_timeout": "Timeout — tool did not respond after 120 s",
+            "process_run_generic_error": "Error: {error}",
+            # Runner events
+            "process_evt_start": "Starting process \"{name}\" ({total} steps)",
+            "process_evt_step_call": "Step {idx}/{total}: {tool}",
+            "process_evt_step_ok": "Step {idx} succeeded",
+            "process_evt_unknown_error": "Unknown error",
+            "process_evt_step_error": "Step {idx} failed: {error}",
+            "process_evt_aborted": "Process aborted at step {idx}.",
+            "process_evt_done": "Process \"{name}\" completed ({total} steps).",
 
             # Windows CA bundle
             "use_windows_ca_bundle": "Use Windows certificates (CA bundle)",

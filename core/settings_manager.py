@@ -42,7 +42,7 @@ class SettingsManager:
     # ---------- Settings accessors ----------
     # Language
     def get_language(self):
-        return self.get("language", "fr")
+        return self.get("language", "en")
 
     def set_language(self, lang_code):
         self.set("language", lang_code)

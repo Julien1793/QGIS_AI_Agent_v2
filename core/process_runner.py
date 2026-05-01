@@ -8,6 +8,8 @@ import json
 import os
 import re
 
+from ..utils.translation import get_translations
+
 
 PROCESS_EXTENSION = ".aiprocess.json"
 
@@ -106,8 +108,9 @@ class ProcessRunner:
             ...
     """
 
-    def __init__(self, agent_loop):
+    def __init__(self, agent_loop, language="en"):
         self._loop = agent_loop
+        self._language = language
 
     def run(self, process_dict: dict, variable_values: dict, tool_executor=None):
         """
@@ -119,13 +122,15 @@ class ProcessRunner:
                        _execute_tool is called directly (safe only on the
                        main thread).
         """
+        t = get_translations(self._language)
         steps = process_dict.get("steps", [])
         total = len(steps)
         variables = {v["id"]: v for v in process_dict.get("variables", [])}
+        name = process_dict.get("name", "")
 
         execute_fn = tool_executor if tool_executor is not None else self._loop._execute_tool
 
-        yield _evt("start", f"Démarrage du traitement « {process_dict.get('name', '')} » ({total} étapes)")
+        yield _evt("start", t["process_evt_start"].format(name=name, total=total))
 
         for idx, step in enumerate(steps):
             tool_name = step.get("tool", "")
@@ -140,26 +145,26 @@ class ProcessRunner:
                 params["code"] = _substitute_str(raw_code, variable_values)
 
             yield _evt("tool_call",
-                       f"Étape {idx + 1}/{total} : {tool_name}",
+                       t["process_evt_step_call"].format(idx=idx + 1, total=total, tool=tool_name),
                        data={"name": tool_name, "args": params})
 
             result = execute_fn(tool_name, params)
 
             if result.get("success"):
                 yield _evt("tool_result",
-                           f"Étape {idx + 1} réussie",
+                           t["process_evt_step_ok"].format(idx=idx + 1),
                            data={"name": tool_name, "result": result})
             else:
-                error = result.get("error", "Erreur inconnue")
+                error = result.get("error", t["process_evt_unknown_error"])
                 if len(error) > 400:
                     error = error[:400] + "..."
                 yield _evt("tool_error",
-                           f"Étape {idx + 1} échouée : {error}",
+                           t["process_evt_step_error"].format(idx=idx + 1, error=error),
                            data={"name": tool_name, "result": result})
-                yield _evt("aborted", f"Traitement interrompu à l'étape {idx + 1}.")
+                yield _evt("aborted", t["process_evt_aborted"].format(idx=idx + 1))
                 return
 
-        yield _evt("done", f"Traitement « {process_dict.get('name', '')} » terminé ({total} étapes).")
+        yield _evt("done", t["process_evt_done"].format(name=name, total=total))
 
 
 # ──────────────────────────────────────────────────────────────
