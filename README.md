@@ -54,6 +54,11 @@ Two modes are available:
 - **Agent mode** — autonomous loop that calls a library of 75 native GIS tools to complete multi-step tasks
 ---
 
+
+
+https://github.com/user-attachments/assets/cd93b18d-62ea-4349-a7ba-d3a1ffc0ac35
+
+
 <img width="1907" height="895" alt="image" src="https://github.com/user-attachments/assets/88bb7b99-4360-4221-b564-b8e07c3bc69e" />
 
 
