@@ -1,6 +1,6 @@
 import json
 from qgis.core import (
-    QgsProject, QgsMapLayer, QgsVectorLayer, QgsRasterLayer
+    QgsProject, QgsMapLayer, QgsVectorLayer, QgsRasterLayer, QgsWkbTypes
 )
 
 def _safe_int(x, default=0):
