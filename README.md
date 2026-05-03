@@ -77,6 +77,7 @@ Two modes are available:
 | **raster** | `get_raster_info`, `get_raster_statistics`, `set_raster_style` |
 | **always** | `capture_map_canvas`, `request_additional_tools` |
 | **fallback** | `run_pyqgis_code` |
+| **planning** | `declare_tool_plan` *(injected internally at iter 0 only — not user-callable)* |
 
 ### Chat Mode
 
@@ -92,7 +93,7 @@ Two modes are available:
 - **Dual API format**: OpenAI-compatible mode (default) and Claude native mode — selectable per connection in Options
 - **SSE streaming** with graceful fallback to batch response
 - **Project context injection**: current layer names, geometry types, and CRS are automatically included per request; field schemas are fetched on demand via `get_layer_fields`
-- **Prompt token gauge**: live status bar indicator showing tokens consumed by the current request vs. the configured context window limit
+- **Prompt token gauge**: live status bar indicator showing tokens consumed by the current request vs. the configured context window limit; agent responses display a full breakdown `Tokens: N (in:X / out:Y)` cumulated across all iterations
 - **Process recording and replay**: save agent runs as `.aiprocess.json` templates with variable substitution
 - **Human-in-the-loop approval**: optional gate shown before each tool execution — approve, edit parameters, send feedback to the agent, or abort the run
 - Real-time step visualization in the chat panel
@@ -211,7 +212,7 @@ In Claude format the plugin uses the native Anthropic Messages API: the system p
 |---|---|
 | Assistant language | Interface and system prompt language (French / English) |
 | Review code before running | Show a dialog to inspect and edit generated code before it runs (chat mode only) |
-| Export requests (debug) | Write each API request and response to a JSON file for debugging |
+| Export requests (debug) | Write all LLM exchanges for each agent run to a single `agent_trace_<timestamp>.json` file (JSON array, one entry per iteration, API keys redacted) |
 | Export folder | Folder where debug trace files are saved |
 
 ### Tab: Connexion — Advanced
@@ -245,10 +246,13 @@ Show me the 5 largest features in the buildings layer.
 Switch to **Agent** mode in the panel. Describe your task in plain language — the agent will:
 
 1. Classify the intent using a lightweight LLM pre-call (12 intent categories below)
-2. Select only the relevant tools for those intents (max ~10 tools per call)
-3. Call them iteratively, passing results between steps
-4. Capture the map canvas after visual changes
-5. Synthesize a final answer
+2. Select the relevant tools for those intents and send them all at iteration 0
+3. At iteration 0, call `declare_tool_plan` first — the LLM declares the exact subset of tools it needs; only those tools are sent in subsequent iterations, significantly reducing input token usage (~60 % reduction on tool schemas)
+4. Call the declared tools iteratively, passing results between steps
+5. Capture the map canvas after visual changes (if enabled)
+6. Synthesize a final answer
+
+> **Token efficiency**: the two-phase approach (full tool list at iter 0 → filtered list at iter 1+) typically cuts input token usage by 60 % or more on multi-step agent runs compared to sending all tools at every iteration. The `request_additional_tools` escape hatch is always kept available in case the LLM needs tools outside its initial plan.
 
 | Intent | Description |
 |---|---|
