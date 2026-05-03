@@ -22,3 +22,9 @@ Thumbs.db
 .venv/
 venv/
 env/
+
+# Release ZIPs produced by release.ps1
+dist/
+
+# Personal build script (kept local only for now)
+release.ps1
