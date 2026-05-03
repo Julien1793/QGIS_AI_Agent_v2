@@ -1941,20 +1941,19 @@ class MainDock(QDockWidget):
         self._apply_agent_mode_ui()
 
     def _apply_agent_mode_ui(self):
-        """Désactive Execute, Générer code et l'onglet Debug quand le mode agent est activé."""
+        """Masque/affiche les boutons et onglets non pertinents selon le mode agent."""
         agent_on = self.settings_manager.get_agent_mode_enabled()
-        enabled = not agent_on
+        visible = not agent_on
         if hasattr(self, "btn_generate"):
-            self.btn_generate.setEnabled(enabled)
+            self.btn_generate.setVisible(visible)
         if hasattr(self, "btn_execute"):
-            self.btn_execute.setEnabled(enabled) 
+            self.btn_execute.setVisible(visible)
         if hasattr(self, "btn_index"):
-            self.btn_index.setEnabled(enabled)
-        # Onglet Debug (index 1) : désactivé en mode agent
+            self.btn_index.setVisible(visible)
+        # Onglet Debug (index 1) : masqué en mode agent
         if hasattr(self, "tabs"):
-            current = self.tabs.currentIndex()
-            self.tabs.setTabEnabled(1, enabled)
-            if agent_on and current == 1:
+            self.tabs.setTabVisible(1, visible)
+            if agent_on and self.tabs.currentIndex() == 1:
                 self.tabs.setCurrentIndex(0)
 
     def update_status_label(self):
