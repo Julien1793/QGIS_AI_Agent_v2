@@ -480,9 +480,9 @@ class MainDock(QDockWidget):
                 matches = re.findall(r"⎇[^0-9]*?(\d+)", content, flags=re.IGNORECASE | re.DOTALL)
                 if not matches:
                     matches = re.findall(r"(?:Tokens\s+(?:utilisés|used)\s*:\s*)(\d+)", content, flags=re.IGNORECASE)
-                # Current footer <!--TOK:n-->
+                # Current footer <!--TOK:n--> or <!--TOK:n:in:out-->
                 if not matches:
-                    matches = re.findall(r"<!--\s*TOK\s*:\s*(\d+)\s*-->\s*$", content, flags=re.IGNORECASE)
+                    matches = re.findall(r"<!--\s*TOK\s*:\s*(\d+)(?::\d+:\d+)?\s*-->\s*$", content, flags=re.IGNORECASE)
                 for m in matches:
                     total_tokens += int(m)
         self.total_tokens_used = total_tokens
@@ -914,13 +914,17 @@ class MainDock(QDockWidget):
 
         # 5) Start the agent loop in a dedicated thread.
         # Blocking LLM calls run in the worker; QGIS tool execution stays on the main thread via signal.
-        def _on_agent_finished(final_text, total_tokens):
+        def _on_agent_finished(final_text, total_tokens, total_input, total_output):
             # 6) Replace the placeholder with the final complete bubble
             safe_body = self._render_markdownish_chat(final_text)
-            tokens_text = (
-                f"{self.t.get('token_count', 'Tokens')}: {total_tokens}"
-                if total_tokens else ""
-            )
+            if total_tokens:
+                tok_label = self.t.get('token_count', 'Tokens')
+                tokens_text = (
+                    f"{tok_label}: {total_tokens}"
+                    f" (in:{total_input} / out:{total_output})"
+                )
+            else:
+                tokens_text = ""
 
             if show_steps and renderer.events:
                 summary_label = self.t.get("agent_summary_label", "AI Summary")
@@ -969,7 +973,7 @@ class MainDock(QDockWidget):
                 steps_marker = f"<!--AGENT_STEPS_START-->{steps_html_for_save}<!--AGENT_STEPS_END-->"
             saved = steps_marker + safe_body
             if total_tokens:
-                saved += f"<!--TOK:{total_tokens}-->"
+                saved += f"<!--TOK:{total_tokens}:{total_input}:{total_output}-->"
             try:
                 self.conversation_manager.append("assistant", saved)
             except Exception:
@@ -1006,7 +1010,7 @@ class MainDock(QDockWidget):
             final_text = (
                 self.t.get("llm_request_error", "Request error") + ": " + err_str
             )
-            _on_agent_finished(final_text, 0)
+            _on_agent_finished(final_text, 0, 0, 0)
 
         def _on_agent_cancelled():
             cancelled_msg = self.t.get("agent_cancelled", "Request cancelled by user.")
@@ -1967,10 +1971,17 @@ class MainDock(QDockWidget):
             if m_steps:
                 agent_steps_html = m_steps.group(1)
                 c = c[:m_steps.start()] + c[m_steps.end():]
-            m_tok = re.search(r"^(.*)<!--\s*TOK\s*:\s*(\d+)\s*-->\s*$", c, flags=re.I | re.S)
+            m_tok = re.search(r"^(.*)<!--\s*TOK\s*:\s*(\d+)(?::(\d+):(\d+))?\s*-->\s*$", c, flags=re.I | re.S)
             if m_tok:
                 c = m_tok.group(1)
-                tokens_info = f"⎇ {self.t.get('token_count', 'Tokens')} : {int(m_tok.group(2))}"
+                tok_total = int(m_tok.group(2))
+                tok_in = int(m_tok.group(3)) if m_tok.group(3) else None
+                tok_out = int(m_tok.group(4)) if m_tok.group(4) else None
+                tok_label = self.t.get('token_count', 'Tokens')
+                if tok_in is not None:
+                    tokens_info = f"{tok_label}: {tok_total} (in:{tok_in} / out:{tok_out})"
+                else:
+                    tokens_info = f"⎇ {tok_label} : {tok_total}"
             body_html = c
         else:
             body_html = self._render_for_feed(c)

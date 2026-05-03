@@ -2620,6 +2620,44 @@ REGISTRY = {
     },
 
     # ══════════════════════════════════════════════════════════
+    # PLANNING META-TOOL (iter 0 only — injected dynamically)
+    # ══════════════════════════════════════════════════════════
+
+    "declare_tool_plan": {
+        "intents": ["__plan__"],
+        "handler": None,
+        "schema": {
+            "type": "function",
+            "function": {
+                "name": "declare_tool_plan",
+                "description": (
+                    "Call this as your VERY FIRST action. "
+                    "Declare the exact list of tools you plan to use for this task. "
+                    "Only those tools (plus request_additional_tools) will be sent "
+                    "in subsequent calls, significantly reducing context size. "
+                    "You can still call request_additional_tools if you discover "
+                    "you need additional tools during execution."
+                ),
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "tools": {
+                            "type": "array",
+                            "items": {"type": "string"},
+                            "description": "Exact list of tool names you plan to use.",
+                        },
+                        "plan": {
+                            "type": "string",
+                            "description": "Brief step-by-step execution plan.",
+                        },
+                    },
+                    "required": ["tools", "plan"],
+                },
+            },
+        },
+    },
+
+    # ══════════════════════════════════════════════════════════
     # ULTIMATE FALLBACK
     # ══════════════════════════════════════════════════════════
 

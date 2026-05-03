@@ -25,6 +25,7 @@ class AgentStepsRenderer:
         "tool_call":      "⚙",
         "tool_result":    "✓",
         "tool_error":     "✗",
+        "llm_thought":    "↳",
         "checkpoint":     "◈",
         "final":          "✔",
         "max_iterations": "⚠",
@@ -38,6 +39,7 @@ class AgentStepsRenderer:
         "tool_call":      "#c0d0e0",
         "tool_result":    "#7fc98f",
         "tool_error":     "#e89090",
+        "llm_thought":    "#b8a8cc",
         "checkpoint":     "#c4a24a",
         "final":          "#8fb8d8",
         "max_iterations": "#e89090",
@@ -116,7 +118,7 @@ class AgentStepsRenderer:
         elif etype in ("tool_result", "tool_error"):
             safe_text = self._prepend_tool_badge(event, safe_text)
 
-        italic = "font-style:italic;" if etype in ("thinking", "final", "checkpoint") else ""
+        italic = "font-style:italic;" if etype in ("thinking", "final", "checkpoint", "llm_thought") else ""
         return (
             f'<p style="margin:2px 0;color:{color};font-size:12px;{italic}">'
             f'<b style="color:{color};">{icon}</b> {safe_text}'

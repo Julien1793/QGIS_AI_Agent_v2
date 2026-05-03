@@ -112,6 +112,7 @@ def get_translations(lang):
             "agent_result_zoom": "Zoom effectué sur '{target}'",
             "agent_result_canvas_captured": "Capture d'écran du canvas ({width}×{height} px)",
             "agent_result_tools_expanded": "Outils ajoutés : {tools}",
+            "agent_result_tool_plan": "Plan d'outils défini : {tools}",
 
             # Labels d'étape
             "agent_label_intent": "Analyse",
@@ -457,6 +458,13 @@ def get_translations(lang):
                 "If the user asks about what is displayed on the map, call capture_map_canvas first — "
                 "never ask them for a screenshot."
             ),
+            "agent_system_prompt_planning": (
+                "\n\nTOOL PLANNING: Your very first action must be to call declare_tool_plan() "
+                "with the list of tools you intend to use for this task. "
+                "Only those tools will be sent in subsequent calls, reducing context size significantly. "
+                "You can still call request_additional_tools() if you discover you need more tools later."
+            ),
+            "agent_result_tool_plan": "Tool plan set: {tools}",
             "agent_intent_system": (
                 "You are an intent classifier for a QGIS assistant. "
                 "Respond ONLY with valid JSON, no text before or after. "

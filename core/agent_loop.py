@@ -64,6 +64,17 @@ class AgentLoop:
 
         # 3 — Retrieve the tool schemas for the detected intents.
         tools = get_schemas_for_intent(intents)
+        # Deduplicate by name (get_schemas_for_intent includes __always__ tools for every
+        # intent, so multiple intents like ["style", "label"] produce duplicate entries).
+        _seen_names: set = set()
+        _deduped = []
+        for s in tools:
+            _n = s["function"]["name"]
+            if _n not in _seen_names:
+                _seen_names.add(_n)
+                _deduped.append(s)
+        tools = _deduped
+
         if not self.settings.get_canvas_capture_enabled():
             _hint = " ALWAYS call capture_map_canvas afterwards to verify the result."
             cleaned = []
@@ -77,14 +88,23 @@ class AgentLoop:
                     s["function"]["description"] = desc.replace(_hint, "")
                 cleaned.append(s)
             tools = cleaned
-        tool_names = [tt["function"]["name"] for tt in tools]
+        # For non-chat intents, prepend declare_tool_plan (planning phase, iter 0 only).
+        # Fetch the schema directly from REGISTRY — get_schemas_for_intent would also inject
+        # __always__ / __fallback__ tools here, which would reintroduce duplicates.
+        _plan_tool = "declare_tool_plan"
+        is_chat_only = intents == ["chat"]
+        if not is_chat_only:
+            tools = [REGISTRY[_plan_tool]["schema"]] + tools
+
+        tool_names = [tt["function"]["name"] for tt in tools
+                      if tt["function"]["name"] != _plan_tool]
 
         # 4 — Emit the detected intents and selected tools to the UI.
         intent_text = t["agent_step_intent_detected"].format(
             intents=", ".join(intents)
         )
         tools_text = t["agent_step_tools_selected"].format(
-            count=len(tools),
+            count=len(tool_names),
             names=", ".join(tool_names),
         )
         self._emit(on_step, "intent",
@@ -94,7 +114,6 @@ class AgentLoop:
         # 5 — Build the initial message list (system prompt + history + current user message).
         # For pure chat, skip the project snapshot to avoid sending thousands of tokens
         # for a request that doesn't need GIS context.
-        is_chat_only = intents == ["chat"]
         history = [m for m in (history_messages or [])
                    if m.get("role") in ("user", "assistant")]
         if is_chat_only or not snapshot_json:
@@ -107,6 +126,8 @@ class AgentLoop:
         system_prompt = t["agent_system_prompt"]
         if self.settings.get_canvas_capture_enabled():
             system_prompt += "\n" + t["agent_system_prompt_canvas_rules"]
+        if not is_chat_only:
+            system_prompt += t.get("agent_system_prompt_planning", "")
         messages = [
             {"role": "system", "content": system_prompt},
             *history,
@@ -114,7 +135,34 @@ class AgentLoop:
         ]
 
         # 6 — Agentic loop: LLM call → tool execution → tool result → next LLM call.
+        _trace_entries = []
+        import datetime as _dt
+        _run_ts = _dt.datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+
+        def _flush_traces():
+            if not _trace_entries:
+                return
+            export_traces = bool(self.settings.get_export_traces() or False)
+            trace_dir = self.settings.get_trace_dir() or ""
+            if not export_traces or not trace_dir:
+                return
+            try:
+                import os
+                os.makedirs(trace_dir, exist_ok=True)
+                path = os.path.join(trace_dir, f"agent_trace_{_run_ts}.json")
+                with open(path, "w", encoding="utf-8") as f:
+                    json.dump(_trace_entries, f, ensure_ascii=False, indent=2)
+            except Exception as ex:
+                try:
+                    from qgis.core import QgsMessageLog, Qgis
+                    QgsMessageLog.logMessage(
+                        f"[AgentLoop] trace write failed: {ex}", "AI Agent", Qgis.Warning)
+                except Exception:
+                    pass
+
         total_tokens = 0
+        total_input_tokens = 0
+        total_output_tokens = 0
         ctx_max = self.settings.get_project_context_max_tokens()
         _fail_count = 0  # consecutive batches containing a non-pyqgis failure
         # last_prompt_tokens: input size of the most recent LLM call — grows each iteration as tool results accumulate.
@@ -139,16 +187,23 @@ class AgentLoop:
 
         for iteration in range(max_iter):
 
+            # At iter 1, the planning phase is over — remove declare_tool_plan from the live
+            # tools list so subsequent calls don't waste tokens on the planning schema.
+            if iteration == 1:
+                tools[:] = [s for s in tools if s["function"]["name"] != _plan_tool]
+
             # Skip the iteration event on the first turn to avoid cluttering the UI.
             if iteration > 0:
                 self._emit(on_step, "iteration",
                            t["agent_step_iteration"].format(
                                current=iteration + 1, max=max_iter))
 
-            response, usage, prompt_tokens = self._llm_call(messages, tools)
+            response, usage, prompt_tokens = self._llm_call(messages, tools, _trace_entries)
             total_tokens += usage
             last_prompt_tokens = prompt_tokens
             last_completion_tokens = max(usage - prompt_tokens, 0)
+            total_input_tokens += prompt_tokens
+            total_output_tokens += last_completion_tokens
 
             # LLM call failed — emit an error event and abort the loop.
             if response is None:
@@ -156,18 +211,25 @@ class AgentLoop:
                 err_text = t["llm_request_error"] + (f": {detail}" if detail else "")
                 _emit_gauge()
                 self._emit(on_step, "final", err_text)
-                return err_text, total_tokens
+                _flush_traces()
+                return err_text, total_tokens, total_input_tokens, total_output_tokens
 
             # The LLM returned a final text response with no further tool calls.
             if not response.get("tool_calls"):
                 final_text = response.get("content") or ""
                 _emit_gauge()
                 self._emit(on_step, "final", final_text)
-                return final_text, total_tokens
+                _flush_traces()
+                return final_text, total_tokens, total_input_tokens, total_output_tokens
 
             # The LLM requested one or more tool calls — update gauge and execute them.
             _emit_gauge(mid_loop=True)
             messages.append({"role": "assistant", **response})
+
+            # Emit any intermediate text the LLM produced alongside its tool calls.
+            thought = (response.get("content") or "").strip()
+            if thought:
+                self._emit(on_step, "llm_thought", thought)
 
             batch_results = []
             for tool_call in response["tool_calls"]:
@@ -190,8 +252,10 @@ class AgentLoop:
                 self._emit(on_step, "tool_call", tool_call_text,
                            data={"name": tool_name, "args": tool_args})
 
-                # Meta-tool: expand the tool set mid-loop without calling a QGIS handler.
-                if tool_name == "request_additional_tools":
+                # Meta-tools: handle without calling a QGIS handler.
+                if tool_name == _plan_tool:
+                    result = self._apply_tool_plan(tool_args, tools)
+                elif tool_name == "request_additional_tools":
                     result = self._expand_tools(tool_args, tools)
                 else:
                     # Delegate to the external tool_executor (main thread) if provided, otherwise run locally.
@@ -258,7 +322,8 @@ class AgentLoop:
         max_text = t["agent_step_max_iterations"].format(max=max_iter)
         _emit_gauge()
         self._emit(on_step, "max_iterations", max_text)
-        return max_text, total_tokens
+        _flush_traces()
+        return max_text, total_tokens, total_input_tokens, total_output_tokens
 
     # ══════════════════════════════════════════════════════════
     # Détection d'intention (LLM léger)
@@ -359,11 +424,13 @@ class AgentLoop:
     # Appel LLM principal (avec tools)
     # ══════════════════════════════════════════════════════════
 
-    def _llm_call(self, messages: list, tools: list) -> tuple:
+    def _llm_call(self, messages: list, tools: list, trace_entries: list = None) -> tuple:
         """
         Call the LLM with the current message history and tool schemas.
         Handles both OpenAI-compatible and Claude (Anthropic) native API formats.
         Returns (response_dict, tokens_used, prompt_tokens). Returns (None, 0, 0) on failure.
+        If trace_entries is provided, appends one entry dict per call (written as a single
+        file by the caller at the end of the run).
         """
         api_url = self.settings.get("api_url", "http://localhost:1234/v1/chat/completions")
         model = self.settings.get("model", "mistral")
@@ -394,11 +461,28 @@ class AgentLoop:
                 token_key: max_tokens,
             }
 
+        def _redact(h):
+            hh = dict(h or {})
+            if "Authorization" in hh:
+                hh["Authorization"] = "Bearer ****"
+            if "x-api-key" in hh:
+                hh["x-api-key"] = "****"
+            return hh
+
         try:
+            t0 = time.time()
             resp = post_with_retry(api_url, payload, headers, timeout=self.settings.get_request_timeout(),
                                    verify=self.settings.get_ssl_verify())
             resp.raise_for_status()
             data = resp.json()
+            if trace_entries is not None:
+                trace_entries.append({
+                    "url": api_url,
+                    "headers": _redact(headers),
+                    "request": payload,
+                    "response": data,
+                    "elapsed_s": round(time.time() - t0, 3),
+                })
 
             if api_format == "claude":
                 return self._parse_claude_llm_response(data)
@@ -472,6 +556,22 @@ class AgentLoop:
 
         return {"success": True, "tool": "request_additional_tools",
                 "added_tools": added, "requested_intents": requested}
+
+    def _apply_tool_plan(self, args: dict, tools: list) -> dict:
+        """Filter the live tools list down to the LLM-declared subset, keeping safety tools."""
+        declared = [str(n) for n in args.get("tools", [])]
+        _always_keep = {"request_additional_tools", "run_pyqgis_code"}
+        if self.settings.get_canvas_capture_enabled():
+            _always_keep.add("capture_map_canvas")
+        declared_set = set(declared)
+        new_tools = [
+            s for s in tools
+            if s["function"]["name"] in declared_set
+            or s["function"]["name"] in _always_keep
+        ]
+        tools.clear()
+        tools.extend(new_tools)
+        return {"success": True, "tool": "declare_tool_plan", "planned_tools": declared}
 
     # ══════════════════════════════════════════════════════════
     # Dispatch vers les handlers
@@ -558,6 +658,12 @@ class AgentLoop:
             return t["agent_result_style_applied"].format(
                 layer=result.get("layer", "?"),
             )
+
+        # Tool plan declaration.
+        if tool == "declare_tool_plan":
+            planned = result.get("planned_tools", [])
+            return t.get("agent_result_tool_plan", "Tool plan set: {tools}").format(
+                tools=", ".join(planned) if planned else "—")
 
         # Dynamic tool expansion.
         if tool == "request_additional_tools":

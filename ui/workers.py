@@ -40,7 +40,7 @@ class AgentWorker(QObject):
     """
     step_event = pyqtSignal(object)
     tool_request = pyqtSignal(str, object)
-    finished = pyqtSignal(str, int)
+    finished = pyqtSignal(str, int, int, int)
     error_signal = pyqtSignal(str)
     cancelled_signal = pyqtSignal()
 
@@ -69,14 +69,14 @@ class AgentWorker(QObject):
                                          "error": "no result"}
 
         try:
-            final_text, tokens = self.agent_loop.run(
+            final_text, tokens, in_tok, out_tok = self.agent_loop.run(
                 user_prompt=self.user_prompt,
                 snapshot_json=self.snapshot_json,
                 on_step=lambda e: self.step_event.emit(e),
                 tool_executor=tool_executor,
                 history_messages=self.history_messages,
             )
-            self.finished.emit(final_text, tokens or 0)
+            self.finished.emit(final_text, tokens or 0, in_tok or 0, out_tok or 0)
         except _UserCancelledError:
             self.cancelled_signal.emit()
         except Exception as e:
