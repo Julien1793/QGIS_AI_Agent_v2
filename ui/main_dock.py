@@ -9,7 +9,7 @@ from qgis.PyQt.QtWidgets import (QSplitter,
     QPushButton, QTabWidget, QMessageBox, QLabel, QTextBrowser,
     QDialog, QPlainTextEdit, QDialogButtonBox, QApplication,
     QFormLayout, QScrollArea, QLineEdit, QSpinBox, QDoubleSpinBox,
-    QCheckBox, QColorDialog,
+    QCheckBox, QColorDialog, QProgressBar,
 )
 from qgis.PyQt.QtCore import Qt, QCoreApplication, QRect, QSize, QThread, pyqtSlot
 from qgis.PyQt.QtGui import QTextCursor, QPixmap, QPainter, QTextFormat, QMovie, QColor
@@ -442,8 +442,21 @@ class MainDock(QDockWidget):
         main_widget = QWidget()
         layout = QVBoxLayout()
 
+        _status_row = QWidget()
+        _status_row_layout = QHBoxLayout(_status_row)
+        _status_row_layout.setContentsMargins(0, 2, 0, 2)
+        _status_row_layout.setSpacing(6)
         self.status_label = QLabel()
-        layout.addWidget(self.status_label)
+        _status_row_layout.addWidget(self.status_label, 0)
+        self._ctx_bar = QProgressBar()
+        self._ctx_bar.setRange(0, 100)
+        self._ctx_bar.setValue(0)
+        self._ctx_bar.setFixedSize(90, 10)
+        self._ctx_bar.setTextVisible(False)
+        self._ctx_bar.setVisible(False)
+        _status_row_layout.addWidget(self._ctx_bar, 0)
+        _status_row_layout.addStretch(1)
+        layout.addWidget(_status_row)
         self.update_status_label()
 
         self.tabs = QTabWidget()
@@ -515,6 +528,7 @@ class MainDock(QDockWidget):
         self.spinner_label.setVisible(True)
         self.spinner_text.setVisible(True)
         self.spinner_movie.start()
+        self.btn_stop.setVisible(True)
         self.conversation_view.moveCursor(QTextCursor.End)
 
     def _hide_spinner(self):
@@ -522,6 +536,7 @@ class MainDock(QDockWidget):
         self.spinner_label.setVisible(False)
         self.spinner_text.setVisible(False)
         self.spinner_text.clear()
+        self.btn_stop.setVisible(False)
 
     def extract_token_count(self, usage):
         if isinstance(usage, dict):
@@ -557,8 +572,19 @@ class MainDock(QDockWidget):
         self.spinner_label.setVisible(False)
         self.spinner_text.setVisible(False)
 
+        self.btn_stop = QPushButton(self.t.get("stop_request", "Stop"))
+        self.btn_stop.setStyleSheet(
+            "QPushButton { background-color: #c0392b; color: white; font-weight: bold; "
+            "padding: 2px 10px; border-radius: 3px; } "
+            "QPushButton:hover { background-color: #e74c3c; }"
+        )
+        self.btn_stop.setVisible(False)
+        self.btn_stop.clicked.connect(self._on_stop_requested)
+
         spinner_row.addWidget(self.spinner_label)
         spinner_row.addWidget(self.spinner_text)
+        spinner_row.addSpacing(8)
+        spinner_row.addWidget(self.btn_stop)
         spinner_row.addStretch(1)
 
         layout.addLayout(spinner_row)
@@ -1273,12 +1299,24 @@ class MainDock(QDockWidget):
             self._thread.quit(); self._thread.wait()
             self._worker.deleteLater(); self._thread.deleteLater()
 
+        def _on_cancelled():
+            cancelled_msg = self.t.get("chat_cancelled", "Request cancelled by user.")
+            cancelled_html = self._render_assistant_html(
+                f'<p style="margin:4px 0;color:#c0392b;font-style:italic;">{self._escape_html(cancelled_msg)}</p>'
+            )
+            self._replace_pending(pending_id, cancelled_html, keep=False)
+            self._hide_spinner()
+            self.set_busy(False)
+            self._thread.quit(); self._thread.wait()
+            self._worker.deleteLater(); self._thread.deleteLater()
+
         # Wire up signals
         self._thread.started.connect(self._worker.run)
         if use_stream and hasattr(self._worker, "stream_chunk"):
             self._worker.stream_chunk.connect(_on_chunk)
         self._worker.finished.connect(_on_finished)
         self._worker.error.connect(_on_error)
+        self._worker.cancelled_signal.connect(_on_cancelled)
 
         self._thread.start()
 
@@ -1372,8 +1410,20 @@ class MainDock(QDockWidget):
             self._thread.quit(); self._thread.wait()
             self._worker.deleteLater(); self._thread.deleteLater()
 
+        def _on_cancelled():
+            cancelled_msg = self.t.get("chat_cancelled", "Request cancelled by user.")
+            cancelled_html = self._render_assistant_html(
+                f'<p style="margin:4px 0;color:#c0392b;font-style:italic;">{self._escape_html(cancelled_msg)}</p>'
+            )
+            self._replace_pending(pending_id, cancelled_html)
+            self._hide_spinner()
+            self.set_busy(False)
+            self._thread.quit(); self._thread.wait()
+            self._worker.deleteLater(); self._thread.deleteLater()
+
         self._worker.finished.connect(_on_finished)
         self._worker.error.connect(_on_error)
+        self._worker.cancelled_signal.connect(_on_cancelled)
         self._thread.start()
 
 
@@ -1500,12 +1550,24 @@ class MainDock(QDockWidget):
             self._thread.quit(); self._thread.wait()
             self._worker.deleteLater(); self._thread.deleteLater()
 
+        def _on_cancelled():
+            cancelled_msg = self.t.get("chat_cancelled", "Request cancelled by user.")
+            cancelled_html = self._render_assistant_html(
+                f'<p style="margin:4px 0;color:#c0392b;font-style:italic;">{self._escape_html(cancelled_msg)}</p>'
+            )
+            self._replace_pending(pending_id, cancelled_html)
+            self._hide_spinner()
+            self.set_busy(False)
+            self._thread.quit(); self._thread.wait()
+            self._worker.deleteLater(); self._thread.deleteLater()
+
         # Connexions
         self._thread.started.connect(self._worker.run)
         if hasattr(self._worker, "stream_chunk"):
             self._worker.stream_chunk.connect(_on_chunk)
         self._worker.finished.connect(_on_finished)
         self._worker.error.connect(_on_error)
+        self._worker.cancelled_signal.connect(_on_cancelled)
 
         # Go
         self._thread.start()
@@ -1739,11 +1801,25 @@ class MainDock(QDockWidget):
             self._thread.quit(); self._thread.wait()
             self._worker.deleteLater(); self._thread.deleteLater()
 
+        def _on_cancelled():
+            cancelled_msg = self.t.get("chat_cancelled", "Request cancelled by user.")
+            cancelled_html = self._render_assistant_html(
+                f'<p style="margin:4px 0;color:#c0392b;font-style:italic;">{self._escape_html(cancelled_msg)}</p>'
+            )
+            self._replace_pending(pending_id, cancelled_html, keep=False)
+            self._hide_spinner()
+            self.set_busy(False)
+            if hasattr(self, "btn_fix_and_run"):
+                self.btn_fix_and_run.setEnabled(True)
+            self._thread.quit(); self._thread.wait()
+            self._worker.deleteLater(); self._thread.deleteLater()
+
         self._thread.started.connect(self._worker.run)
         if use_stream and hasattr(self._worker, "stream_chunk"):
             self._worker.stream_chunk.connect(_on_chunk)
         self._worker.finished.connect(_on_finished)
         self._worker.error.connect(_on_error)
+        self._worker.cancelled_signal.connect(_on_cancelled)
         self._thread.start()
 
 
@@ -1888,14 +1964,21 @@ class MainDock(QDockWidget):
         ctx_max = self.last_context_max
         if prompt_tok and ctx_max:
             pct = min(int(prompt_tok / ctx_max * 100), 100)
-            filled = min(pct // 10, 10)
-            bar = "█" * filled + "░" * (10 - filled)
             color = "#e74c3c" if pct >= 90 else "#f39c12" if pct >= 75 else "#2ecc71"
             ctx_label = self.t.get("context_usage_label", "Context")
             ctx_part = (
                 f" | <b>{ctx_label} :</b> "
-                f"<span style='color:{color}'>{bar} {prompt_tok:,}&nbsp;/&nbsp;{ctx_max:,} tokens</span>"
+                f"<span style='color:{color}'>{prompt_tok:,}&nbsp;/&nbsp;{ctx_max:,} tokens</span>"
             )
+            self._ctx_bar.setValue(pct)
+            self._ctx_bar.setStyleSheet(
+                f"QProgressBar {{ border:none; border-radius:5px; background:#3a3a3a; }}"
+                f"QProgressBar::chunk {{ border-radius:5px; background:{color}; }}"
+            )
+            self._ctx_bar.setToolTip(self.t.get("gauge_tooltip", ""))
+            self._ctx_bar.setVisible(True)
+        else:
+            self._ctx_bar.setVisible(False)
 
         self.status_label.setText(
             f"<b>{self.t['mode']} :</b> {mode} | "
@@ -2051,13 +2134,18 @@ class MainDock(QDockWidget):
             for i, m in enumerate(all_msgs)
         )
 
-        # Rendu panneau de preview (dans l'ordre d'apparition)
-        ctx_msg_list = [all_msgs[i] for i in range(len(all_msgs)) if i in idx_to_send]
-        preview = self._render_context_preview(ctx_msg_list)
-
-        self.conversation_view.setHtml(preview + html_msgs)
+        self.conversation_view.setHtml(html_msgs)
         self.conversation_view.moveCursor(QTextCursor.End)
 
+
+    def _on_stop_requested(self):
+        worker = getattr(self, "_agent_worker", None)
+        if worker is not None:
+            worker.cancel()
+            return
+        worker = getattr(self, "_worker", None)
+        if worker is not None and hasattr(worker, "cancel"):
+            worker.cancel()
 
     def set_busy(self, busy: bool):
         """

@@ -12,6 +12,7 @@
 import json
 import re
 import time
+import requests as _requests
 
 from .tools_registry import get_schemas_for_intent, get_handler_name, REGISTRY
 from . import tools_handlers as handlers
@@ -24,6 +25,17 @@ class AgentLoop:
         self.settings = settings_manager
         self.iface = iface
         self.executor = executor
+        self._current_session = None
+        self._cancelled = False
+
+    def cancel(self):
+        """Abort the current run() immediately by closing the active HTTP session."""
+        self._cancelled = True
+        if self._current_session is not None:
+            try:
+                self._current_session.close()
+            except Exception:
+                pass
 
     # ══════════════════════════════════════════════════════════
     # API publique
@@ -52,6 +64,17 @@ class AgentLoop:
         Returns:
             (final_text: str, total_tokens: int)
         """
+        self._cancelled = False
+        self._current_session = _requests.Session()
+
+        def _close_session():
+            if self._current_session is not None:
+                try:
+                    self._current_session.close()
+                except Exception:
+                    pass
+                self._current_session = None
+
         lang = self._get_lang()
         t = get_translations(lang)
         max_iter = self._get_max_iterations()
@@ -128,6 +151,8 @@ class AgentLoop:
             system_prompt += "\n" + t["agent_system_prompt_canvas_rules"]
         if not is_chat_only:
             system_prompt += t.get("agent_system_prompt_planning", "")
+        if not is_chat_only and self.settings.get_api_format() != "claude":
+            system_prompt += t.get("agent_system_prompt_reasoning", "")
         messages = [
             {"role": "system", "content": system_prompt},
             *history,
@@ -187,6 +212,11 @@ class AgentLoop:
 
         for iteration in range(max_iter):
 
+            if self._cancelled:
+                _close_session()
+                _flush_traces()
+                return "", 0, 0, 0
+
             # At iter 1, the planning phase is over — remove declare_tool_plan from the live
             # tools list so subsequent calls don't waste tokens on the planning schema.
             if iteration == 1:
@@ -207,10 +237,15 @@ class AgentLoop:
 
             # LLM call failed — emit an error event and abort the loop.
             if response is None:
+                if self._cancelled:
+                    _close_session()
+                    _flush_traces()
+                    return "", 0, 0, 0
                 detail = getattr(self, "_last_llm_error", "")
                 err_text = t["llm_request_error"] + (f": {detail}" if detail else "")
                 _emit_gauge()
                 self._emit(on_step, "final", err_text)
+                _close_session()
                 _flush_traces()
                 return err_text, total_tokens, total_input_tokens, total_output_tokens
 
@@ -219,6 +254,7 @@ class AgentLoop:
                 final_text = response.get("content") or ""
                 _emit_gauge()
                 self._emit(on_step, "final", final_text)
+                _close_session()
                 _flush_traces()
                 return final_text, total_tokens, total_input_tokens, total_output_tokens
 
@@ -232,6 +268,7 @@ class AgentLoop:
                 self._emit(on_step, "llm_thought", thought)
 
             batch_results = []
+            _replan_needed = False
             for tool_call in response["tool_calls"]:
                 tool_name = tool_call["function"]["name"]
                 try:
@@ -257,6 +294,10 @@ class AgentLoop:
                     result = self._apply_tool_plan(tool_args, tools)
                 elif tool_name == "request_additional_tools":
                     result = self._expand_tools(tool_args, tools)
+                    if result.get("replan_needed"):
+                        _replan_needed = True
+                        if not any(s["function"]["name"] == _plan_tool for s in tools):
+                            tools.insert(0, REGISTRY[_plan_tool]["schema"])
                 else:
                     # Delegate to the external tool_executor (main thread) if provided, otherwise run locally.
                     _execute = tool_executor or self._execute_tool
@@ -300,6 +341,11 @@ class AgentLoop:
                         ],
                     })
 
+            # If tools were expanded mid-batch, ask the LLM to re-declare its plan.
+            if _replan_needed:
+                messages.append({"role": "user", "content": t["agent_replan_after_expansion"]})
+                self._emit(on_step, "checkpoint", t["agent_replan_after_expansion"])
+
             # Update failure counter from this batch.
             non_pyqgis_failures = [
                 r for r in batch_results
@@ -319,9 +365,14 @@ class AgentLoop:
                 self._emit(on_step, "checkpoint", checkpoint_label)
 
         # The agent hit the iteration cap without reaching a final answer.
+        if self._cancelled:
+            _close_session()
+            _flush_traces()
+            return "", 0, 0, 0
         max_text = t["agent_step_max_iterations"].format(max=max_iter)
         _emit_gauge()
         self._emit(on_step, "max_iterations", max_text)
+        _close_session()
         _flush_traces()
         return max_text, total_tokens, total_input_tokens, total_output_tokens
 
@@ -365,7 +416,9 @@ class AgentLoop:
 
         try:
             resp = post_with_retry(api_url, payload, headers, timeout=30,
-                                   verify=self.settings.get_ssl_verify())
+                                   verify=self.settings.get_ssl_verify(),
+                                   session=self._current_session,
+                                   cancel_check=lambda: self._cancelled)
             if not resp.ok:
                 try:
                     from qgis.core import QgsMessageLog, Qgis
@@ -472,7 +525,9 @@ class AgentLoop:
         try:
             t0 = time.time()
             resp = post_with_retry(api_url, payload, headers, timeout=self.settings.get_request_timeout(),
-                                   verify=self.settings.get_ssl_verify())
+                                   verify=self.settings.get_ssl_verify(),
+                                   session=self._current_session,
+                                   cancel_check=lambda: self._cancelled)
             resp.raise_for_status()
             data = resp.json()
             if trace_entries is not None:
@@ -555,7 +610,8 @@ class AgentLoop:
                 added.append(name)
 
         return {"success": True, "tool": "request_additional_tools",
-                "added_tools": added, "requested_intents": requested}
+                "added_tools": added, "requested_intents": requested,
+                "replan_needed": bool(added)}
 
     def _apply_tool_plan(self, args: dict, tools: list) -> dict:
         """Filter the live tools list down to the LLM-declared subset, keeping safety tools."""

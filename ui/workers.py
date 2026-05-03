@@ -8,6 +8,7 @@ class ChatWorker(QObject):
     finished = pyqtSignal(str, object)   # (response, usage)
     error = pyqtSignal(str)
     stream_chunk = pyqtSignal(str)
+    cancelled_signal = pyqtSignal()
 
     def __init__(self, agent, prompt, mode, lang, messages=None, stream=False):
         super().__init__()
@@ -17,20 +18,31 @@ class ChatWorker(QObject):
         self.lang = lang
         self.messages = messages
         self.stream = stream
+        self._cancelled = False
+
+    def cancel(self):
+        self._cancelled = True
 
     def run(self):
         try:
             if self.stream:
                 def _on_chunk(txt):
-                    self.stream_chunk.emit(txt)
+                    if not self._cancelled:
+                        self.stream_chunk.emit(txt)
                 resp, usage = self.agent.chat(self.prompt, mode=self.mode, lang=self.lang,
                                               messages=self.messages, on_stream=_on_chunk)
             else:
                 resp, usage = self.agent.chat(self.prompt, mode=self.mode, lang=self.lang,
                                               messages=self.messages)
+            if self._cancelled:
+                self.cancelled_signal.emit()
+                return
             self.finished.emit(resp, usage)
         except Exception as e:
-            self.error.emit(str(e))
+            if self._cancelled:
+                self.cancelled_signal.emit()
+            else:
+                self.error.emit(str(e))
 
 
 class AgentWorker(QObject):
@@ -76,7 +88,10 @@ class AgentWorker(QObject):
                 tool_executor=tool_executor,
                 history_messages=self.history_messages,
             )
-            self.finished.emit(final_text, tokens or 0, in_tok or 0, out_tok or 0)
+            if self._cancelled:
+                self.cancelled_signal.emit()
+            else:
+                self.finished.emit(final_text, tokens or 0, in_tok or 0, out_tok or 0)
         except _UserCancelledError:
             self.cancelled_signal.emit()
         except Exception as e:
@@ -90,8 +105,9 @@ class AgentWorker(QObject):
         self._tool_event.set()
 
     def cancel(self):
-        """Demandé depuis le thread principal : interrompt proprement le loop après l'outil en cours."""
+        """Interrompt le loop : ferme la connexion HTTP active et débloque l'attente d'outil."""
         self._cancelled = True
+        self.agent_loop.cancel()
         self._tool_event.set()
 
 
@@ -104,6 +120,7 @@ class StreamWorker(QObject):
     finished = pyqtSignal(str, object)
     error = pyqtSignal(str)
     not_supported = pyqtSignal(str)
+    cancelled_signal = pyqtSignal()
 
     def __init__(self, agent, prompt, mode, lang, messages=None):
         super().__init__()
@@ -112,6 +129,10 @@ class StreamWorker(QObject):
         self.mode = mode
         self.lang = lang
         self.messages = messages
+        self._cancelled = False
+
+    def cancel(self):
+        self._cancelled = True
 
     def run(self):
         import json
@@ -135,6 +156,9 @@ class StreamWorker(QObject):
             got_any = False
 
             for raw in resp.iter_lines(decode_unicode=True):
+                if self._cancelled:
+                    self.cancelled_signal.emit()
+                    return
                 if not raw:
                     continue
                 s = raw.strip()
@@ -165,6 +189,10 @@ class StreamWorker(QObject):
 
                 if "usage" in obj:
                     usage = obj["usage"]
+
+            if self._cancelled:
+                self.cancelled_signal.emit()
+                return
 
             if not got_any:
                 self.not_supported.emit("no-chunk")

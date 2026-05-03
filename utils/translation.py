@@ -88,6 +88,8 @@ def get_translations(lang):
             "agent_step_final": "Synthèse de la réponse...",
             "agent_step_max_iterations": "Nombre maximum d'itérations atteint ({max}). Opération incomplète.",
             "agent_cancelled": "Requête annulée par l'utilisateur.",
+            "chat_cancelled": "Requête annulée par l'utilisateur.",
+            "stop_request": "Arrêter",
             "agent_no_new_tools":"aucun nouveau",
             "agent_summary_label": "Résumé de l'IA",
 
@@ -383,6 +385,8 @@ def get_translations(lang):
             "agent_step_final": "Finalizing response...",
             "agent_step_max_iterations": "Maximum iterations reached ({max}). Operation incomplete.",
             "agent_cancelled": "Request cancelled by user.",
+            "chat_cancelled": "Request cancelled by user.",
+            "stop_request": "Stop",
             "agent_no_new_tools":"no new tools",
             "agent_summary_label": "AI Summary",
 
@@ -464,7 +468,17 @@ def get_translations(lang):
                 "Only those tools will be sent in subsequent calls, reducing context size significantly. "
                 "You can still call request_additional_tools() if you discover you need more tools later."
             ),
+            "agent_system_prompt_reasoning": (
+                "\n\n## Reasoning\n"
+                "Before each tool call, write one short sentence in the message content explaining "
+                "what you are about to do and why. One line maximum."
+            ),
             "agent_result_tool_plan": "Tool plan set: {tools}",
+            "agent_replan_after_expansion": (
+                "New tools are now available. Update your plan: call declare_tool_plan() "
+                "with the complete list of tools you still need to complete the task. "
+                "Do not re-include tools that are not necessary or have already run successfully."
+            ),
             "agent_intent_system": (
                 "You are an intent classifier for a QGIS assistant. "
                 "Respond ONLY with valid JSON, no text before or after. "
