@@ -9,7 +9,7 @@ from qgis.PyQt.QtWidgets import (QSplitter,
     QPushButton, QTabWidget, QMessageBox, QLabel, QTextBrowser,
     QDialog, QPlainTextEdit, QDialogButtonBox, QApplication,
     QFormLayout, QScrollArea, QLineEdit, QSpinBox, QDoubleSpinBox,
-    QCheckBox, QColorDialog, QProgressBar,
+    QCheckBox, QColorDialog, QProgressBar, QSizePolicy,
 )
 from qgis.PyQt.QtCore import Qt, QCoreApplication, QRect, QSize, QThread, pyqtSlot
 from qgis.PyQt.QtGui import QTextCursor, QPixmap, QPainter, QTextFormat, QMovie, QColor
@@ -447,15 +447,18 @@ class MainDock(QDockWidget):
         _status_row_layout.setContentsMargins(0, 2, 0, 2)
         _status_row_layout.setSpacing(6)
         self.status_label = QLabel()
-        _status_row_layout.addWidget(self.status_label, 0)
+        self.status_label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+        self.status_label.setMinimumWidth(0)
+        _status_row_layout.addWidget(self.status_label, 1)
         self._ctx_bar = QProgressBar()
         self._ctx_bar.setRange(0, 100)
         self._ctx_bar.setValue(0)
-        self._ctx_bar.setFixedSize(90, 10)
+        self._ctx_bar.setFixedHeight(10)
+        self._ctx_bar.setMaximumWidth(90)
+        self._ctx_bar.setMinimumWidth(20)
         self._ctx_bar.setTextVisible(False)
         self._ctx_bar.setVisible(False)
         _status_row_layout.addWidget(self._ctx_bar, 0)
-        _status_row_layout.addStretch(1)
         layout.addWidget(_status_row)
         self.update_status_label()
 
@@ -1911,7 +1914,7 @@ class MainDock(QDockWidget):
         if dialog.exec_():
             self.lang = self.settings_manager.get_language()
             if self.lang not in ["fr", "en"]:
-                self.lang = "fr"
+                self.lang = "en"
             self.t = get_translations(self.lang)
             if hasattr(self, "executor") and hasattr(self.executor, "update_language"):
                 self.executor.update_language(self.lang)

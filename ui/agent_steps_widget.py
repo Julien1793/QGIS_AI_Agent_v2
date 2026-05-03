@@ -19,12 +19,12 @@ class AgentStepsRenderer:
     """
 
     ICONS = {
-        "thinking":       "◐",
+        "thinking":       "◌",
         "intent":         "◉",
-        "iteration":      "▸",
+        "iteration":      "›",
         "tool_call":      "⚙",
-        "tool_result":    "✓",
-        "tool_error":     "✗",
+        "tool_result":    "✔",
+        "tool_error":     "✘",
         "llm_thought":    "↳",
         "checkpoint":     "◈",
         "final":          "✔",
@@ -35,7 +35,7 @@ class AgentStepsRenderer:
     _COLORS = {
         "thinking":       "#8fb8d8",
         "intent":         "#a8c5e0",
-        "iteration":      "#6a7a8a",
+        "iteration":      "#3d5060",
         "tool_call":      "#c0d0e0",
         "tool_result":    "#7fc98f",
         "tool_error":     "#e89090",
@@ -85,8 +85,8 @@ class AgentStepsRenderer:
         rows = [self._render_event(e) for e in self.events]
         if show_final_marker:
             rows.append(
-                '<p style="color:#4a5565;font-size:10px;text-align:center;margin:6px 0 0 0;">'
-                '• • •</p>'
+                '<p style="color:#2d3d4d;font-size:10px;text-align:center;margin:8px 0 0 0;">'
+                '· · ·</p>'
             )
 
         inner = "".join(rows)
@@ -96,10 +96,10 @@ class AgentStepsRenderer:
             '<table cellspacing="0" cellpadding="0" width="100%"'
             ' style="margin:0 0 10px 0;">'
             '<tr valign="top">'
-            '<td width="3" bgcolor="#5a8fbf"'
-            ' style="background-color:#5a8fbf;padding:0;">&nbsp;</td>'
-            '<td bgcolor="#1c2530"'
-            ' style="background-color:#1c2530;padding:8px 12px;">'
+            '<td width="3" bgcolor="#4a7aaa"'
+            ' style="background-color:#4a7aaa;padding:0;">&nbsp;</td>'
+            '<td bgcolor="#1a2230"'
+            ' style="background-color:#1a2230;padding:8px 14px;">'
             f'{inner}'
             '</td>'
             '</tr>'
@@ -116,25 +116,41 @@ class AgentStepsRenderer:
         if etype == "tool_call":
             safe_text = self._highlight_tool_name(event, safe_text)
         elif etype in ("tool_result", "tool_error"):
-            safe_text = self._prepend_tool_badge(event, safe_text)
+            safe_text = self._prepend_tool_badge(event, safe_text, etype)
+
+        if etype == "iteration":
+            return (
+                '<table cellspacing="0" cellpadding="0" width="100%"'
+                ' style="margin:6px 0 3px 0;">'
+                '<tr><td height="1" bgcolor="#253545"'
+                ' style="background-color:#253545;"></td></tr>'
+                '</table>'
+                f'<p style="margin:0 0 2px 0;color:{color};font-size:10px;">'
+                f'<b style="color:{color};">{icon}</b> {safe_text}'
+                f'</p>'
+            )
 
         italic = "font-style:italic;" if etype in ("thinking", "final", "checkpoint", "llm_thought") else ""
+        left_margin = "margin-left:10px;" if etype == "llm_thought" else ""
+
         return (
-            f'<p style="margin:2px 0;color:{color};font-size:12px;{italic}">'
+            f'<p style="margin:2px 0;color:{color};font-size:12px;{italic}{left_margin}">'
             f'<b style="color:{color};">{icon}</b> {safe_text}'
             f'</p>'
         )
 
-    def _prepend_tool_badge(self, event: dict, safe_text: str) -> str:
+    def _prepend_tool_badge(self, event: dict, safe_text: str, etype: str = "tool_result") -> str:
         tool_name = (event.get("data") or {}).get("name")
         if not tool_name:
             return safe_text
+        badge_bg  = "#1e3a28" if etype == "tool_result" else "#3a1e1e"
+        badge_col = "#7fc98f" if etype == "tool_result" else "#e89090"
         badge = (
             f'<span style="font-family:\'Consolas\',monospace;'
-            f'background-color:#2a3545;color:#a8d4f0;'
-            f'padding:1px 4px;font-size:11px;">{tool_name}</span>'
+            f'background-color:{badge_bg};color:{badge_col};'
+            f'padding:1px 5px;font-size:11px;">{tool_name}</span>'
         )
-        sep = ' <span style="color:#4a5565;">—</span> ' if safe_text else ""
+        sep = ' <span style="color:#3a5060;">—</span> ' if safe_text else ""
         return f'{badge}{sep}{safe_text}'
 
     def _highlight_tool_name(self, event: dict, safe_text: str) -> str:
@@ -143,8 +159,8 @@ class AgentStepsRenderer:
         if tool_name and tool_name in safe_text:
             span = (
                 f'<span style="font-family:\'Consolas\',monospace;'
-                f'background-color:#2a3545;color:#a8d4f0;'
-                f'padding:1px 4px;font-size:11px;">{tool_name}</span>'
+                f'background-color:#1e2d42;color:#a8d4f0;'
+                f'padding:1px 5px;font-size:11px;">{tool_name}</span>'
             )
             return safe_text.replace(tool_name, span, 1)
         return safe_text

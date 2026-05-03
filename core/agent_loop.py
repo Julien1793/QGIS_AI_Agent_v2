@@ -877,9 +877,9 @@ class AgentLoop:
 
     def _get_lang(self) -> str:
         try:
-            return self.settings.get_language() or "fr"
+            return self.settings.get_language() or "en"
         except Exception:
-            return "fr"
+            return "en"
 
     def _get_max_iterations(self) -> int:
         try:

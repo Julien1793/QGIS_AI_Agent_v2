@@ -471,7 +471,8 @@ def get_translations(lang):
             "agent_system_prompt_reasoning": (
                 "\n\n## Reasoning\n"
                 "Before each tool call, write one short sentence in the message content explaining "
-                "what you are about to do and why. One line maximum."
+                "what you are about to do and why. One line maximum. "
+                "Always write this sentence in the same language as the user's request."
             ),
             "agent_result_tool_plan": "Tool plan set: {tools}",
             "agent_replan_after_expansion": (
